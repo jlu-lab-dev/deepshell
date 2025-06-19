@@ -37,10 +37,10 @@ $ uv sync
 
 (2) 重命名`./config/.env.example`为`./config/.env`，将api-key配置到"api_key=" 字段
 
-(3) 运行singleton_app.py
+(3) 运行singleton_app.py (Pycharm解释器：Windows选`.venv/Scripts/python.exe`, Linux系统为`.venv/bin/python`，MacOS为`.venv/bin/python3.10`)
 
 ```
-$ ./.venv/bin/python singleton_app.py
+$ ./.venv/Scripts/python singleton_app.py
 ```
 
 (4) 会议记录功能需要下载ffmpeg之后才能使用，配置好ffmpeg之后首次运行会自动下载依赖
