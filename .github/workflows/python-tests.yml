@@ -1,0 +1,53 @@
+name: Python Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10']
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pyqt5 python3-pyqt5.qtwebengine portaudio19-dev python3-pyaudio
+    
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Create and activate virtual environment
+      working-directory: .
+      run: |
+        uv venv
+        source .venv/bin/activate
+
+    - name: Install Python dependencies
+      working-directory: .
+      run: |
+        source .venv/bin/activate
+        uv sync
+        uv add pytest pytest-qt
+    
+    - name: Run tests
+      working-directory: .
+      run: |
+        source .venv/bin/activate
+        python -m pytest tests/ -v
+      env:
+        QT_QPA_PLATFORM: offscreen 

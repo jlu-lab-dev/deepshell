@@ -1,0 +1,53 @@
+[project]
+name = "deepshell-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb>=0.6.3",
+    "dashscope>=1.22.2",
+    "langchain>=0.3.21",
+    "langchain-chroma>=0.2.2",
+    "langchain-community>=0.3.20",
+    "langchain-deepseek>=0.1.3",
+    "openpyxl>=3.1.5",
+    "paddleocr>=2.10.0",
+    "paddlepaddle==2.4.2",
+    "openai>=1.68.2",
+    "pandas>=2.2.3",
+    "pillow>=11.1.0",
+    "pyaudio>=0.2.14",
+    "pypdf>=5.4.0",
+    "pyqt5>=5.15.11",
+    "pyqt5-qt5==5.15.2",
+    "pyyaml>=6.0.2",
+    "setuptools>=78.1.0",
+    "wheel>=0.45.1",
+    "torch==1.13.1",
+    "torchvision==0.14.1",
+    "ultralytics==8.3.98",
+    "langchain_core==0.3.49",
+    "langchain-ollama>=0.3.0",
+    "onnxruntime==1.16.2",
+    "PyQt5-sip==12.17.0",
+    "markdown==3.7",
+    "unstructured>=0.17.2",
+    "openai-whisper==20240930",
+    "ffmpeg-python==0.2.0",
+    "xmind-sdk",
+    "python-pptx==1.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-qt>=4.4.0",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[tool.uv]
+python-install-mirror = "https://registry.npmmirror.com/-/binary/python-build-standalone/"

@@ -1,0 +1,546 @@
+import re
+import markdown
+
+from enum import Enum
+from PIL import Image
+from PyQt5 import QtGui
+from PyQt5.QtWidgets import QLabel, QSizePolicy, QWidget, QPushButton, QHBoxLayout, QSpacerItem, QVBoxLayout, \
+    QApplication
+from PyQt5.QtCore import pyqtSignal, Qt, QThread, QSize, QTimer
+from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QIcon
+from bs4 import BeautifulSoup
+
+from ui.file_thumbnail import FileThumbnail
+
+
+# 返回消息的类型
+class MessageType(Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    TABLE = "table"
+    PAINT = "paint"
+    WAITING = "waiting"
+
+
+class TextMessage(QLabel):
+    def __init__(self, text, user_send=False, parent=None):
+        super(TextMessage, self).__init__(text, parent)
+        self.msg_text = text
+        self.user_send = user_send
+        self.init_ui()
+
+    def init_ui(self):
+        self.setMaximumWidth(450)
+        self.setWordWrap(True)
+        self.setTextFormat(Qt.RichText)
+        self.setFont(QFont('微软雅黑', 12))
+        self.setContextMenuPolicy(Qt.NoContextMenu)
+        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+
+        self.original_markdown_text = self.msg_text
+        html_text = markdown.markdown(self.msg_text)
+        self.setText(html_text)
+
+        if self.user_send:
+            self.setAlignment(Qt.AlignLeft)
+            self.setStyleSheet(
+                '''
+                background-color: rgba(0,93,255,204);
+                border-radius:10px;
+                padding:10px;
+                color: white;
+                '''
+            )
+        else:
+            self.setAlignment(Qt.AlignLeft)
+            self.setStyleSheet(
+                '''
+                background-color: transparent;
+                border-radius:10px;
+                padding-left:0px;
+                color: white;
+                '''
+            )
+
+        self.font_metrics = QFontMetrics(QFont('微软雅黑', 12))
+        if self.user_send:
+            rect = self.font_metrics.boundingRect(self.msg_text)
+        else:
+            rect = self.font_metrics.boundingRect(html_text)
+        self.setMaximumWidth(rect.width() + 30)
+
+    def meeting_content_adjust_size(self):
+        self.setMaximumWidth(500)
+        self.adjustSize()
+
+    def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
+        super(TextMessage, self).paintEvent(a0)
+
+    def update_text(self, text):
+        self.original_markdown_text = text
+        html_text = markdown.markdown(text)
+        self.setText(html_text)
+        rect = self.font_metrics.boundingRect(html_text)
+        self.setMaximumWidth(rect.width() + 30)
+
+
+class OpenImageThread(QThread):
+    def __init__(self, image_path):
+        super().__init__()
+        self.image_path = image_path
+
+    def run(self) -> None:
+        image = Image.open(self.image_path)
+        image.show()
+
+
+class ImageMessage(QLabel):
+    def __init__(self, avatar, parent=None):
+        super().__init__(parent)
+        self.avatar = avatar
+        self.init_ui()
+
+    def init_ui(self):
+        if isinstance(self.avatar, str):
+            self.setPixmap(QPixmap(self.avatar))
+            self.image_path = self.avatar
+        elif isinstance(self.avatar, QPixmap):
+            self.setPixmap(self.avatar)
+
+        self.setMaximumWidth(420)
+        self.setMaximumHeight(420)
+        self.setScaledContents(True)
+        
+    def mousePressEvent(self, event):
+        if event.buttons() == Qt.LeftButton:  # 左键按下
+            self.open_image_thread = OpenImageThread(self.image_path)
+            self.open_image_thread.start()
+
+
+class TableMessage(QLabel):
+    def __init__(self, text, user_send=False, parent=None):
+        super(TableMessage, self).__init__(parent)
+        self.msg_text = text
+        self.user_send = user_send
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWordWrap(True)
+        self.setTextFormat(Qt.RichText)
+        self.setFont(QFont('微软雅黑', 12))
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)  # 修改为Preferred
+
+        # 解析内容并设置初始文本
+        self.update_text(markdown.markdown(self.msg_text))
+
+        # 样式设置（减少padding）
+        if self.user_send:
+            self.setAlignment(Qt.AlignLeft)
+            self.setStyleSheet(
+                '''
+                background-color: rgba(0,93,255,204);
+                border-radius:10px;
+                padding:10px;
+                color: white;
+                '''
+            )
+        else:
+            self.setAlignment(Qt.AlignLeft)
+            self.setStyleSheet(
+                '''
+                background-color: transparent;
+                border-radius:10px;
+                padding-left:0px;
+                color: white;
+                '''
+            )
+
+    def parse_table_data(self, text):
+        """生成紧凑型HTML表格"""
+        pattern = r"table>>(.*?)<<table"
+        match = re.search(pattern, text, re.DOTALL)
+        if match is None:
+            return text
+
+        csv_data = text[7:-7].strip()
+        rows = [row.split(",") for row in csv_data.split("\n") if row.strip()]
+
+        if not rows:
+            return "无表格数据"
+
+        # 紧凑型表格样式
+        html = '''
+        <table style="
+            border-collapse: collapse;
+            color: white;
+            margin: 0;
+            padding: 0;
+            border: 1px solid rgba(255,255,255,0.3);
+        ">
+        '''
+        for i, row in enumerate(rows):
+            html += "<tr>"
+            for cell in row:
+                tag = "th" if i == 0 else "td"
+                html += f'''
+                <{tag} style="
+                    padding: 2px 5px;
+                    border: 1px solid rgba(255,255,255,0.2);
+                ">
+                    {cell.strip()}
+                </{tag}>
+                '''
+            html += "</tr>"
+        html += "</table>"
+        return html
+
+    def update_text(self, text):
+        self.msg_text = text
+        is_table = text.startswith("table>>") and text.endswith("<<table")
+
+        if is_table:
+            display_text = self.parse_table_data(text)
+            self.setText(display_text)
+            # 对表格内容使用固定宽度计算
+            self.setMaximumWidth(350)  # 为表格设置合理最大宽度
+        else:
+            self.setText(markdown.markdown(text))
+            # 对普通文本使用动态宽度计算
+            fm = QFontMetrics(self.font())
+            text_width = fm.horizontalAdvance(text) + 20
+            self.setMaximumWidth(min(text_width, 350))  # 限制最大宽度
+
+        self.adjustSize()  # 关键：让QLabel根据内容调整尺寸
+
+    def sizeHint(self):
+        """覆盖默认尺寸计算"""
+        hint = super().sizeHint()
+        if self.msg_text.startswith("table>>"):
+            return QSize(300, hint.height())  # 为表格固定宽度
+        return QSize(min(hint.width(), 500), hint.height())
+
+
+# 加载动画
+class WaitingMessage(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(QSize(95, 36))
+        self.setStyleSheet(
+            '''
+            background-color: rgba(235,235,235,204);
+            border-radius:10px;
+            padding:10px;
+            color: white;
+            '''
+        )
+
+        self.current_image_index = 0
+        self.total_images = 39  # 动画图片总数（0~39）
+        self.timer = QTimer(self)  # 定义定时器
+        self.timer.timeout.connect(self.updateLoadingImage)  # 定时器信号连接到updateImage方法
+        self.timer.start(60)
+
+    def updateLoadingImage(self):
+        if self.current_image_index > self.total_images:
+            self.current_image_index = 0  # 重置索引
+
+        image_path = f"ui/icon/dialog_loading/{self.current_image_index:05d}.png"
+        pixmap = QPixmap(image_path)
+
+        if not pixmap.isNull():
+            self.setPixmap(pixmap)
+            self.current_image_index += 1
+        else:
+            print(f"图片加载失败: {image_path}")
+            self.current_image_index += 1
+
+
+class BubbleMessage(QWidget):
+    speech_signal = pyqtSignal(bool, str, QWidget)
+    delete_signal = pyqtSignal(QWidget)
+
+    def __init__(self, message, avatar, msg_type, font_size, user_send=False, parent=None, need_button=True, thumbnail_list=None):
+        super().__init__(parent)
+        self.message = message
+        self.msg_type = msg_type
+        self.avatar = avatar
+        self.font_size = font_size
+        self.user_send = user_send
+        self.need_button = need_button
+        self.thumbnail_list = thumbnail_list
+
+        self.isPlayAudio = False
+
+        self.init_ui()
+
+    def init_ui(self):
+        self.setStyleSheet(
+            '''
+                background: #1A88FF;
+                box-shadow: 0px 2px 10px 0px rgba(0,0,0,0.2);
+                border-radius: 8px;
+            '''
+        )
+
+        # 播放按钮
+        self.play_button = QPushButton(self)
+        self.play_button.setFixedSize(QSize(16, 16))
+        self.play_button.setStyleSheet(
+            '''
+            background-color: transparent;
+            border:none;
+            '''
+        )
+        self.play_button.setIcon(QIcon('ui/icon/icon_播放_侧边栏模式@2x.png'))
+        self.play_button.setIconSize(QSize(16, 16))
+        self.play_button.clicked.connect(self.playAudio)
+        self.play_button.setFlat(True)
+        self.play_button.setEnabled(False)
+        self.play_button.hide()
+
+        # 拷贝按钮
+        self.copy_button = QPushButton(self)
+        self.copy_button.setFixedSize(QSize(16, 16))
+        self.copy_button.setStyleSheet(
+            '''
+            background-color: transparent;
+            border:none;
+            padding: 0px;
+            margin: 0px;
+            '''
+        )
+        self.copy_button.setIcon(QIcon('ui/icon/icon_对话_拷贝.png'))
+        self.copy_button.setIconSize(QSize(16, 16))
+        self.copy_button.clicked.connect(self.copy_text)
+        self.copy_button.setFlat(True)
+        self.copy_button.setEnabled(False)
+        self.copy_button.hide()
+
+        # markdown按钮
+        self.markdown_button = QPushButton(self)
+        self.markdown_button.setFixedSize(QSize(16, 16))
+        self.markdown_button.setStyleSheet(
+            '''
+            background-color: transparent;
+            border:none;
+            padding: 0px;
+            margin: 0px;
+            '''
+        )
+        self.markdown_button.setIcon(QIcon('ui/icon/icon_对话_markdown.png'))
+        self.markdown_button.setIconSize(QSize(16, 16))
+        self.markdown_button.clicked.connect(self.copy_markdown)
+        self.markdown_button.setEnabled(False)
+        self.markdown_button.setFlat(True)
+        self.markdown_button.hide()
+
+        # 删除按钮
+        self.delete_button = QPushButton(self)
+        self.delete_button.setFixedSize(QSize(16, 16))
+        self.delete_button.setStyleSheet(
+            '''
+            background-color: transparent;
+            border:none;
+            padding: 0px;
+            margin: 0px;
+            '''
+        )
+        self.delete_button.clicked.connect(self.delete_message)
+        self.delete_button.setIcon(QIcon('ui/icon/icon_对话_删除.png'))
+        self.delete_button.setIconSize(QSize(16, 16))
+        self.delete_button.setEnabled(False)
+        self.delete_button.setFlat(True)
+        self.delete_button.hide()
+
+        # 根据消息类型创建消息
+        self.message = self.generate_msg(self.message, self.msg_type, self.user_send)
+
+        # 气泡布局
+        message_layout = QHBoxLayout()
+        message_layout.setSpacing(8)
+        message_layout.setContentsMargins(0, 5, 5, 5)
+
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(16)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+
+
+
+        if self.user_send:  # 如果是用户发送的消息，则添加space将气泡推到右边
+            message_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            message_layout.addWidget(self.message, 1)
+        else:             # 如果是ai回复，则不添加space，直接在左边生成气泡
+            message_layout.addWidget(self.message, 1)
+            # 如果是AI回复的消息，则显示播放按钮
+            if (self.msg_type == MessageType.TEXT or self.msg_type == MessageType.TABLE) and self.need_button:
+                self.play_button.show()
+                button_layout.addWidget(self.play_button, 0, Qt.AlignLeft)
+                self.copy_button.show()
+                button_layout.addWidget(self.copy_button, 0, Qt.AlignLeft)
+                self.markdown_button.show()
+                button_layout.addWidget(self.markdown_button, 0, Qt.AlignLeft)
+                self.delete_button.show()
+                button_layout.addWidget(self.delete_button, 0, Qt.AlignLeft)
+                button_layout.addStretch(1)
+            message_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addLayout(message_layout)
+        main_layout.addLayout(button_layout)
+        self.setLayout(main_layout)
+
+    def generate_msg(self, message, msg_type, user_send):
+        if msg_type == MessageType.TEXT:
+            message = TextMessage(message, user_send)
+        elif msg_type == MessageType.IMAGE:
+            message = ImageMessage(message)
+        elif msg_type == MessageType.TABLE:
+            message = TableMessage(message, user_send)
+        elif msg_type == MessageType.WAITING:
+            message = WaitingMessage()
+        else:
+            raise ValueError("未知的消息类型")
+        return message
+
+    def add_thumbnail_item(self, file_path):
+        if self.thumbnail_layout.count() == 0:
+            self.thumbnail_layout.addWidget(self.thumbnail_scroll_area)
+        self.thumbnail_scroll_area.add_thumbnail(file_path)
+
+    def playAudio(self):
+        print("play audio:", self.message.text())
+        if self.isPlayAudio:
+            self.play_button.setIcon(QIcon('ui/icon/icon_播放_侧边栏模式@2x.png'))
+        else:
+            self.play_button.setIcon(QIcon('ui/icon/stop.png'))
+        self.isPlayAudio = not self.isPlayAudio
+        self.speech_signal.emit(self.isPlayAudio, self.message.text(), self)
+
+    def playComplete(self):
+        print("playComplete")
+        self.play_button.setIcon(QIcon('ui/icon/icon_播放_侧边栏模式@2x.png'))
+        self.isPlayAudio = False
+
+    def updatePlayIcon(self):
+        # 更新 play_button 图标
+        if not self.isPlayAudio:
+            self.play_button.setIcon(QIcon('ui/icon/icon_播放_侧边栏模式@2x.png'))
+        else:
+            self.play_button.setIcon(QIcon('ui/icon/stop.png'))
+
+    def copy_text(self):
+        QApplication.clipboard().setText(BeautifulSoup(self.message.text(), "html.parser").get_text())
+        # 切换图标两秒后恢复
+        self.copy_button.setIcon(QIcon('ui/icon/icon_对话_markdown_拷贝完成'))
+        QTimer.singleShot(2000, lambda: self.copy_button.setIcon(QIcon('ui/icon/icon_对话_拷贝.png')))
+
+    def copy_markdown(self):
+        QApplication.clipboard().setText(self.message.original_markdown_text)
+        # 切换图标两秒后恢复
+        self.markdown_button.setIcon(QIcon('ui/icon/icon_对话_markdown_拷贝完成'))
+        QTimer.singleShot(2000, lambda: self.markdown_button.setIcon(QIcon('ui/icon/icon_对话_markdown.png')))
+
+    def delete_message(self):
+        self.delete_signal.emit(self)
+
+    def update_button_status(self, status):
+        self.copy_button.setEnabled(status)
+        self.play_button.setEnabled(status)
+        self.delete_button.setEnabled(status)
+        self.markdown_button.setEnabled(status)
+
+
+class ThumbnailMessage(QWidget):
+    delete_signal = pyqtSignal(QWidget)
+    def __init__(self,  user_send=False,  parent=None, thumbnail=None, file_path=None, close_btn_visible=False, thumbnail_clickable=True):
+        super().__init__(parent)
+        self.close_btn_visible = close_btn_visible
+        self.thumbnail_clickable = thumbnail_clickable
+        self.user_send = user_send
+        
+        
+        if thumbnail is not None:
+            self.thumbnail = thumbnail
+        if file_path is not None:
+            self.thumbnail = self.get_thumbnail_item_from_path(file_path)
+        self.init_ui()
+    def init_ui(self):
+        self.setStyleSheet(
+            '''
+                background: #1A88FF;
+                box-shadow: 0px 2px 10px 0px rgba(0,0,0,0.2);
+                border-radius: 8px;
+            '''
+        )
+        
+        self.thumbnail_layout = QHBoxLayout()
+        self.thumbnail_layout.setSpacing(8)
+        self.thumbnail_layout.setContentsMargins(0, 5, 5, 5)
+        self.thumbnail.set_close_btn_visible(self.close_btn_visible)
+        if self.user_send:  
+            self.thumbnail_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            self.thumbnail_layout.addWidget(self.thumbnail)
+        else:
+            self.thumbnail_layout.addWidget(self.thumbnail)
+            self.thumbnail_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addLayout(self.thumbnail_layout)
+        self.setLayout(main_layout)
+        
+    def get_thumbnail_item_from_path(self, file_path):
+        thumbnail = FileThumbnail(file_path)
+        thumbnail.set_close_btn_visible(self.close_btn_visible)
+        thumbnail.set_self_clickable(self.thumbnail_clickable)
+        return thumbnail
+
+
+class ButtonMessage(QWidget):
+    delete_signal = pyqtSignal(QWidget)
+    def __init__(self,  func, user_send=False,  parent=None):
+        super().__init__(parent)
+        self.user_send = user_send
+        self.button = QPushButton(func,self)
+        # 设置圆角、边框及背景色样式
+        self.button.setStyleSheet("""
+            QPushButton {
+                background-color: #1A88FF;
+                color: #FFFFFF;
+                font-size: 16px;
+                padding: 8px;  
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a6a6a6;
+            }
+        """)
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setStyleSheet(
+            '''
+                background: #1A88FF;
+                border-radius: 7px;
+            '''
+        )
+
+        self.button_layout = QHBoxLayout()
+        self.button_layout.setSpacing(8)
+        self.button_layout.setContentsMargins(0, 0, 0, 0)
+        if self.user_send:  
+            self.button_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            self.button_layout.addWidget(self.button)
+        else:
+            self.button_layout.addWidget(self.button)
+            self.button_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addLayout(self.button_layout)
+        self.setLayout(main_layout)

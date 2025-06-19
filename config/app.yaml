@@ -1,0 +1,14 @@
+# 应用基础信息
+
+# 应用名称
+name: DeepShell
+# 应用版本  
+version: "1.0.0"
+# 应用描述
+description: |
+  DeepShell是基于大语言模型（LLM）的操作系统智能体，将LLM与操作系统深度集成，LLM作为操作系统的大脑，
+  用户通过自然语言与操作系统完成交互，LLM分析用户的复杂需求、完成推理、决策、调用操作系统上的工具完成复杂任务。
+
+
+# logo 相对根目录的路径
+logo: "ui/icon/DeepShell/icon_app_logo_DeepShell_圆角.png"
