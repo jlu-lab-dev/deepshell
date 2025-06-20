@@ -9,3 +9,4 @@ def sys_func_call(command):
         exec(command)
     except Exception as e:
         print(f"执行失败: {e}")
+
