@@ -286,6 +286,7 @@ class GifLoadingMessage(QWidget):
         layout.setSpacing(6)
         layout.addWidget(self.gif_label)
         layout.addWidget(self.text_label)
+        layout.setAlignment(Qt.AlignVCenter)
         self.setLayout(layout)
 
 
