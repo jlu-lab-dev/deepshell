@@ -386,17 +386,25 @@ sys_agent_function_call:
       (2) 若未指定操作路径，默认在当前路径下执行
       (3) 若未指定系统，默认使用跨平台兼容方案
     2. 输出格式：
-      (1) 仅输出原始 JSON 内容，不要添加任何 Markdown 格式（如 ```json）、注释或解释。
-      (2) 不要添加额外字段或文本，只返回结构化动作。
-      (3) 输出格式必须严格满足：{"tool": "<function_name>", "args": {<参数键值对>}}
-          - tool: 必须是提供的函数列表中的 name 字段，未匹配时为 null
-          - args: 必须是对象，参数名和类型严格按 schema 要求，未匹配时为 null
-      (4) 如果没有匹配的函数，请输出：{"tool": null, "args": null}
-      (5) 示例输出：{"tool": "open_file", "args": {"path": "D:\\Pictures\\cat.jpg"}}
+      (1) 如果只需一步操作，输出格式为：{"tool": "<function_name>", "args": {<参数键值对>}}
+      (2) 如果需要多步操作（即工具调用链），请输出一个有序的 JSON 数组，每个元素为一次工具调用。例如：
+          [
+            {"tool": "find_file", "args": {"filename": "test.txt", "nums": 1}},
+            {"tool": "read_file", "args": {"path": "D:\\project\\test.txt"}}
+          ]
+      (3) 仅输出原始 JSON 内容，不要添加任何 Markdown 格式（如 ```json）、注释或解释。
+      (4) 不要添加额外字段或文本，只返回结构化动作。
+      (5) 每一步的参数名和类型严格按 schema 要求。
+      (6) 如果没有匹配的函数，请输出：{"tool": null, "args": null}
 
-      【示例交互】
-      用户输入：帮我打开计算器
-      输出：{"tool": "open_calculator", "args": {}}
-
-      用户输入：请删除 D:\test.txt
-      输出：{"tool": "delete_file", "args": {"path": "D:\\test.txt"}}
+    【示例交互】
+    示例1：
+    用户输入：查找test.txt文件并读取内容
+    输出：
+    [
+      {"tool": "find_file", "args": {"filename": "test.txt", "nums": 1}},
+      {"tool": "read_file", "args": {"path": "D:\\project\\test.txt"}}
+    ]
+    示例2：
+    用户输入：请删除 D:\test.txt
+    输出：{"tool": "delete_file", "args": {"path": "D:\\test.txt"}}

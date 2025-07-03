@@ -57,6 +57,9 @@ from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 # app_list = json.loads(app_list)
 
 
+logging.basicConfig(level=logging.INFO)
+
+
 class AssistantMode(Enum):
     """
         会议记录时AI助手为meeting模式，界面切换为meeting box，发送的消息类型MessageType是TEXT
@@ -647,35 +650,56 @@ class MainWin(QWidget):
         if hasattr(self, 'function_calling_waiting_message') and self.function_calling_waiting_message is not None:
             self.chat_box.remove_message_item(self.function_calling_waiting_message)
             self.function_calling_waiting_message = None
-            
+        
+        actions = json.loads(message.strip())
+        if isinstance(actions, dict):  # 单步
+            actions = [actions]
+        logging.info(actions)
+        # self.sys_function_calling(actions)
+
         button_msg = ButtonMessage("执行操作", user_send=False)
-        button_msg.button.clicked.connect(lambda: self.sys_function_calling(message, button_msg))
+        button_msg.button.clicked.connect(lambda: self.sys_function_calling(actions, button_msg))
         self.chat_box.add_message_item(button_msg)
 
-    def sys_function_calling(self, message, button_message):
-        """根据function_call_task输出结果执行对应工具函数"""
-        print(message)
+    def sys_function_calling(self, actions, button_message=None):
+        """根据function_call_task输出结果执行对应工具函数，支持单步和多步function calling"""
         try:
-            action = json.loads(message.strip())
-            tool_name = action.get("tool")
-            args = action.get("args", {})
-            if tool_name and tool_name in FUNCTION_MAP:
-                func = FUNCTION_MAP[tool_name]
-                output = func(**args)
-                response = f"执行结果：【成功】{output}." if output else f"执行结果：【成功】."
-            else:
-                response = "执行结果：【失败】无法识别的操作或无效的工具名。"
+            result_bubble = BubbleMessage('', '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
+            self.chat_box.add_message_item(result_bubble)
+            for idx, action in enumerate(actions):
+                tool_name = action.get("tool")
+                args = action.get("args", {})
+                if tool_name and tool_name in FUNCTION_MAP:
+                    func = FUNCTION_MAP[tool_name]
+                    result = func(**args)
+                    logging.info(result)
+                    if result["success"]:
+                        msg = f'步骤{idx + 1} 执行【成功】：{result["message"]}'
+                    else:
+                        msg = f'执行【失败】：{result["message"]}'
+                    if result.get("data") is not None:
+                        data = result["data"]
+                        if isinstance(data, list):
+                            msg += "<br>" + "<br>".join(str(item) for item in data)
+                        elif isinstance(data, dict):
+                            msg += "<br>" + "<br>".join(f"{k}: {v}" for k, v in data.items())
+                        else:
+                            msg += "<br>" + str(data)
+                else:
+                    msg = "执行【失败】：无法识别的操作或无效的工具名。"
+                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + msg.replace('\n', '<br>'))
         except Exception as e:
-            response = f"执行结果：【失败】{str(e)}"
+            msg = f"执行【失败】{str(e)}"
+            result_bubble.message.update_text(result_bubble.message.text() + "<br>" + msg.replace('\n', '<br>'))
         finally:
-            button_message.set_text("已执行")
-            button_message.set_clickable(False)
+            if button_message:
+                button_message.set_text("已执行")
+                button_message.set_clickable(False)
 
-            bubble_msg = BubbleMessage(response.replace('\n','<br>'), '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
-            bubble_msg.speech_signal.connect(self.handle_speech)
-            bubble_msg.update_button_status(True)
+            result_bubble.message.update_text(result_bubble.message.text() + "操作已全部完成")
+            result_bubble.speech_signal.connect(self.handle_speech)
+            result_bubble.update_button_status(True)
             
-            self.chat_box.add_message_item(bubble_msg)
             self.chat_box.scrollArea.reset_auto_scroll()
             self.input_field.set_send_button_status(True)
     
