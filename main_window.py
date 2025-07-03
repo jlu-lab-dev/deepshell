@@ -631,7 +631,7 @@ class MainWin(QWidget):
             if tool_name and tool_name in FUNCTION_MAP:
                 func = FUNCTION_MAP[tool_name]
                 output = func(**args)
-                response = f"执行结果：【成功】{tool_name}:\n{output}." if output else f"执行结果：【成功】{tool_name}."
+                response = f"执行结果：【成功】{output}." if output else f"执行结果：【成功】."
             else:
                 response = "执行结果：【失败】无法识别的操作或无效的工具名。"
 
