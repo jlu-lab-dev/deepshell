@@ -298,7 +298,7 @@ class MainWin(QWidget):
         self.timer.timeout.connect(self.start_meeting)  # 定时器信号连接到updateImage方法
 
         self.timerSend = QTimer(self)
-        self.timerSend.timeout.connect(self.listeningToWaiting)  # “聆听中”到“等待中”的自动转换
+        self.timerSend.timeout.connect(self.listeningToWaiting)  # "聆听中"到"等待中"的自动转换
 
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
@@ -622,9 +622,7 @@ class MainWin(QWidget):
     # system agent function calling chain START
     def start_function_call_chain(self, user_input, tool_result, result_bubble):
         content = user_input + "\n工具调用结果：" + "\n".join(
-            f"{tool}: {json.dumps(result, ensure_ascii=False)}"
-            for item in tool_result
-            for tool, result in item.items()
+            f"{json.dumps(item, ensure_ascii=False)}" for item in tool_result
         ) if len(tool_result) > 0 else user_input
         logging.info(content)
         self.function_call_task = SysAgentFunctionCallTask()
@@ -654,6 +652,9 @@ class MainWin(QWidget):
                 if tool_name and tool_name in FUNCTION_MAP:
                     func = FUNCTION_MAP[tool_name]
                     result = func(**args)
+                    # 将tool_name字段放到字典最前面
+                    from collections import OrderedDict
+                    result = OrderedDict([('tool_name', tool_name), *result.items()])
                     self.tool_result.append(result)
                     logging.info(result)
                     if result["success"]:
