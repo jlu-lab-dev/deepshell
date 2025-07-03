@@ -2,14 +2,14 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from chat.assistant import Assistant
 
 
-class SysFuncTask(QThread):
+class SysAgentTask(QThread):
     complete_signal = pyqtSignal(str)  # 用于通知完成
     update_signal = pyqtSignal(str)  # 用于流式更新内容
 
     def __init__(self):
-        super(SysFuncTask, self).__init__()
+        super(SysAgentTask, self).__init__()
         self.topic = ""
-        self.assistant = Assistant('sys_func')
+        self.assistant = Assistant('sys_agent')
         self.stop_flag = False  # 对话停止标志
 
     def set_topic(self, topic):
@@ -32,7 +32,7 @@ class SysFuncTask(QThread):
                 self.complete_signal.emit(complete_response)
 
         except Exception as e:
-            print(f"SysFuncTask exception: {e}")
+            print(f"SysAgentTask exception: {e}")
             complete_response = "模型对话失败，请检查模型配置或网络连接！"
             self.complete_signal.emit(complete_response)
 

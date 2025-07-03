@@ -17,9 +17,9 @@ from audio_transcription.intro_ui import AudioTranscriptionIntroPage
 from meeting.intro_ui import MeetingIntroPage
 from mind_map.intro_ui import MindMapIntroPage
 from ppt.intro_ui import PPTIntroPage
-from sys_func.intro_ui import SysFuncIntro
-from sys_func.sys_func_call import sys_func_call
-from sys_func.sys_func_task import SysFuncTask
+from sys_agent.intro_ui import SysFuncIntro
+from sys_agent.sys_func_call import FUNCTION_MAP
+from sys_agent.sys_agent_task import SysAgentTask
 from translation.intro_ui import TranslateIntroPage
 from ui.chat.bubble_message import BubbleMessage, MessageType ,ThumbnailMessage,ButtonMessage
 from meeting.meeting_box import MeetingWidget
@@ -376,7 +376,7 @@ class MainWin(QWidget):
                 self.pgen.pptgen_complete_signal.connect(self.handle_gen_ppt)
             case "系统功能":
                 self.mode = AssistantMode.CHAT
-                self.sendTask = SysFuncTask()
+                self.sendTask = SysAgentTask()
             # case "AI 表格":
             #     self.mode = AssistantMode.CHAT
             #     self.sendTask = TableTask()
@@ -521,7 +521,7 @@ class MainWin(QWidget):
             bubble_message = ButtonMessage("执行操作", user_send=False)
             self.chat_box.scrollArea.reset_auto_scroll()
             self.chat_box.add_message_item(bubble_message)
-            bubble_message.button.clicked.connect(lambda: sys_func_call(result))
+            bubble_message.button.clicked.connect(lambda: self.sys_function_calling(result, bubble_message))
 
         # 重置当前BubbleMessage引用
         self.current_bubble_message = None
@@ -549,18 +549,6 @@ class MainWin(QWidget):
         # 判断当前页面如果是gui就跳转聊天
         self.add_bubble_message(user_input, True, thumbnail_list=thumbnail_list)
 
-        # if "返回" in user_input or "返回首页" in user_input:
-        #     self.handle_function_selection("智能问答")
-        #     self.show_waiting_message(False)
-        #     self.input_field.set_send_button_status(True)
-        #     return
-        # elif "打开" in user_input or "调高" in user_input or "调低" in user_input or "关闭" in user_input or "调节" in user_input \
-        #         or "查询" in user_input:  # 打开本地应用
-        #     self.input_field.set_send_button_status(True)
-        #     self.start_local_app(user_input)
-        #     self.show_waiting_message(False)
-        #     return
-
         if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:  # AI模型检索
             if self.contentStackWgt.currentWidget() != self.chat_box:
                 self.contentStackWgt.setCurrentWidget(self.chat_box)
@@ -577,16 +565,6 @@ class MainWin(QWidget):
             return
 
         self.add_bubble_message(message, True)
-
-        # if "返回" in message or "返回首页" in message:
-        #     self.handle_function_selection("智能问答")
-        #     self.show_waiting_message(False)
-        #     return
-        # elif "打开" in message or "调高" in message or "调低" in message or "关闭" in message or "调节" in message \
-        #         or "查询" in message:  # 打开本地应用
-        #     self.start_local_app(message)
-        #     self.show_waiting_message(False)
-        #     return
 
         if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:
             self.send_quest_to_ai(message)  # AI模型检索
@@ -645,31 +623,24 @@ class MainWin(QWidget):
 
     # Send End
 
-    def start_local_app(self, text):
-        flag = False
-        for dic in app_list:
-            for key in dic:
-                print(key + ":" + text)
-                if key in text:
-                    print("正在为您" + key)
-                    if self.serverCheck.internet_status():
-                        self.speechTask.set_message("正在为您" + key)
-                        self.speechTask.start()
-                    # os.system(dic[key])
-
-                    self.localAppTask.set_app(dic[key])
-                    self.localAppTask.start()
-                    return
-        if not flag:
-            print("抱歉，暂不支持此操作")
-            bubble_message = BubbleMessage("抱歉，暂不支持此操作", '', msg_type=MessageType.TEXT, font_size=12,
-                                           user_send=False)
-            self.chat_box.add_message_item(bubble_message)
-            if self.serverCheck.internet_status():
-                self.speechTask.set_message("抱歉，暂不支持此操作")
-                self.speechTask.start()
+    def sys_function_calling(self, message, button_message):
+        try:
+            action = json.loads(message.strip())
+            tool_name = action.get("tool")
+            args = action.get("args", {})
+            if tool_name and tool_name in FUNCTION_MAP:
+                func = FUNCTION_MAP[tool_name]
+                output = func(**args)
+                response = f"执行结果：【成功】{tool_name}:\n{output}." if output else f"执行结果：【成功】{tool_name}."
             else:
-                bubble_message.play_button.hide()
+                response = "执行结果：【失败】无法识别的操作或无效的工具名。"
+
+            button_message.set_text("已执行")
+            button_message.set_clickable(False)
+        except Exception as e:
+            response = f"执行结果：【失败】{str(e)}"
+        finally:
+            self.chat_box.add_message_item(BubbleMessage(response.replace('\n','<br>'), '', msg_type=MessageType.TEXT, font_size=12, user_send=False))
 
     def set_chat_mode(self):
         print("Chat mode now.")

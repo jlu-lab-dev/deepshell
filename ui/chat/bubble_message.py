@@ -544,3 +544,10 @@ class ButtonMessage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addLayout(self.button_layout)
         self.setLayout(main_layout)
+
+    def set_text(self, content):
+        self.button.setText(content)
+
+    def set_clickable(self, clickable):
+        self.button.setEnabled(clickable)
+
