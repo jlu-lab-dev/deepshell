@@ -19,9 +19,9 @@ from mind_map.intro_ui import MindMapIntroPage
 from ppt.intro_ui import PPTIntroPage
 from sys_agent.intro_ui import SysFuncIntro
 from sys_agent.sys_func_call import FUNCTION_MAP
-from sys_agent.sys_agent_task import SysAgentTask
+from sys_agent.sys_agent_task import SysAgentExplanationTask, SysAgentFunctionCallTask
 from translation.intro_ui import TranslateIntroPage
-from ui.chat.bubble_message import BubbleMessage, MessageType ,ThumbnailMessage,ButtonMessage
+from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage ,ThumbnailMessage,ButtonMessage
 from meeting.meeting_box import MeetingWidget
 from ui.chat.chat_box import ChatBox
 from chat.chat_task import ChatTask
@@ -252,9 +252,11 @@ class MainWin(QWidget):
 
         self.mode = AssistantMode.CHAT
         self.current_model = "DeepSeek-V3"
+        self.current_msg = None # string
         self.current_bubble_message = None
         self.current_func = "智能问答"
         self.selected_kb_id_list = []
+        self.function_calling_waiting_message = None
 
     def func_init(self):
         self.serverCheck = ServerCheck()
@@ -376,7 +378,7 @@ class MainWin(QWidget):
                 self.pgen.pptgen_complete_signal.connect(self.handle_gen_ppt)
             case "系统功能":
                 self.mode = AssistantMode.CHAT
-                self.sendTask = SysAgentTask()
+                self.sendTask = SysAgentExplanationTask()
             # case "AI 表格":
             #     self.mode = AssistantMode.CHAT
             #     self.sendTask = TableTask()
@@ -428,6 +430,8 @@ class MainWin(QWidget):
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TABLE, font_size=12, user_send=False)
             elif self.current_func == "AI 绘画":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
+            elif self.current_func == "系统功能":
+                self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, need_button=False, user_send=False)
             else:
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             self.speech_page.updateStatus('应答中')
@@ -451,38 +455,20 @@ class MainWin(QWidget):
             # BubbleMessage功能按钮启用
             self.current_bubble_message.update_button_status(True)
             bubble_message = self.current_bubble_message
-            # 设置语音任务
-            # if self.serverCheck.internet_status():
-            #     self.speechTask.set_message(result, self.current_bubble_message)
-            #     self.speechTask.start()
-            #     if "Invalid API-key provided" in result:
-            #         self.current_bubble_message.play_button.hide()
-            #         self.speech_page.updateStatus('休眠中')
-            # else:
-            #     self.current_bubble_message.play_button.hide()
-            #     self.speech_page.updateStatus('休眠中')
         else:
-            # 如果没有BubbleMessage，创建一个新的
-            # 创建新的BubbleMessage
+            # 如果没有BubbleMessage，创建一个新的BubbleMessage
             if self.current_func == "AI 表格":
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.TABLE, font_size=12, user_send=False)
             elif self.current_func == "AI 绘画":
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
+            elif self.current_func == "系统功能":
+                self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, need_button=False, user_send=False)
             else:
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             self.speech_page.updateStatus('应答中')
             bubble_message.speech_signal.connect(self.handle_speech)
             self.chat_box.add_message_item(bubble_message)
             bubble_message.update_button_status(True)
-            # if self.serverCheck.internet_status():
-            #     self.speechTask.set_message(result, bubble_message)
-            #     self.speechTask.start()
-            #     if "Invalid API-key provided" in result:
-            #         bubble_message.play_button.hide()
-            #         self.speech_page.updateStatus('休眠中')
-            # else:
-            #     bubble_message.play_button.hide()
-            #     self.speech_page.updateStatus('休眠中')
 
         if self.current_func == "AI 表格":
             pattern = r"table>>(.*?)<<table"
@@ -510,6 +496,7 @@ class MainWin(QWidget):
                     print(full_path)
                     self.chat_box.scrollArea.reset_auto_scroll()
                     self.chat_box.add_message_item(thumbnail_message)
+
         if self.current_func == "AI PPT":
                 base_name="AI PPT"
                 bubble_message = ButtonMessage("生成PPT", user_send=False)
@@ -518,10 +505,16 @@ class MainWin(QWidget):
                 bubble_message.button.clicked.connect(lambda: self.pgen.markdown_to_json(result))
 
         if self.current_func == "系统功能":
-            bubble_message = ButtonMessage("执行操作", user_send=False)
-            self.chat_box.scrollArea.reset_auto_scroll()
-            self.chat_box.add_message_item(bubble_message)
-            bubble_message.button.clicked.connect(lambda: self.sys_function_calling(result, bubble_message))
+            self.function_call_task = SysAgentFunctionCallTask()
+            self.function_call_task.update_signal.connect(self.update_function_calling_chain)
+            self.function_call_task.complete_signal.connect(self.function_calling_chain_callback)
+            self.function_call_task.set_topic(self.current_msg)
+            # 如果还没有加载动画气泡，则添加
+            if not hasattr(self, 'function_calling_waiting_message') or self.function_calling_waiting_message is None:
+                self.function_calling_waiting_message = BubbleMessage('ui/icon/loading.gif| 正在准备工具链', '', MessageType.LOADING, 12, user_send=False)
+                self.chat_box.add_message_item(self.function_calling_waiting_message)
+                self.function_calling_waiting_message.show()
+            self.function_call_task.start()
 
         # 重置当前BubbleMessage引用
         self.current_bubble_message = None
@@ -529,6 +522,7 @@ class MainWin(QWidget):
         self.input_field.set_send_button_status(True)
 
     def send_quest_to_ai(self, message):
+        self.current_msg = message
         self.speech_page.updateStatus('等待中')
         if self.serverCheck.internet_status():
             # Speech.short_text_play("好的，请稍等")
@@ -537,6 +531,7 @@ class MainWin(QWidget):
                     detected_lang = TranslateDetect.detect_language(message)
                     self.input_field.language_layout.itemAt(0).widget().set_current_language(detected_lang)
                 message = message+"[END]把用户输入翻译成"+self.input_field.language_layout.itemAt(2).widget().current_language
+            
             self.sendTask.set_topic(message)
             self.sendTask.start()
         else:
@@ -623,7 +618,28 @@ class MainWin(QWidget):
 
     # Send End
 
+    # system agent function calling chain START
+    def update_function_calling_chain(self, message):
+        """function_call_task输出调用工具链的进度"""
+        self.input_field.set_send_button_status(False)
+
+    def function_calling_chain_callback(self, message):
+        """调用工具链生成完毕"""
+        # 先把加载动画变成勾号
+        if hasattr(self, 'function_calling_waiting_message') and self.function_calling_waiting_message is not None:
+            # 替换为勾号气泡
+            checkmark_html = '<span style="font-size:20px;color:#4CAF50;">✅</span> 工具链已准备好'
+            self.chat_box.remove_message_item(self.function_calling_waiting_message)
+            self.function_calling_waiting_message = None
+            self.chat_box.add_message_item(BubbleMessage(checkmark_html, '', MessageType.TEXT, 12, need_button=False, user_send=False))            
+
+        button_msg = ButtonMessage("执行操作", user_send=False)
+        button_msg.button.clicked.connect(lambda: self.sys_function_calling(message, button_msg))
+        self.chat_box.add_message_item(button_msg)
+
     def sys_function_calling(self, message, button_message):
+        """根据function_call_task输出结果执行对应工具函数"""
+        print(message)
         try:
             action = json.loads(message.strip())
             tool_name = action.get("tool")
@@ -634,13 +650,21 @@ class MainWin(QWidget):
                 response = f"执行结果：【成功】{output}." if output else f"执行结果：【成功】."
             else:
                 response = "执行结果：【失败】无法识别的操作或无效的工具名。"
-
-            button_message.set_text("已执行")
-            button_message.set_clickable(False)
         except Exception as e:
             response = f"执行结果：【失败】{str(e)}"
         finally:
-            self.chat_box.add_message_item(BubbleMessage(response.replace('\n','<br>'), '', msg_type=MessageType.TEXT, font_size=12, user_send=False))
+            button_message.set_text("已执行")
+            button_message.set_clickable(False)
+
+            bubble_msg = BubbleMessage(response.replace('\n','<br>'), '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
+            bubble_msg.speech_signal.connect(self.handle_speech)
+            bubble_msg.update_button_status(True)
+            
+            self.chat_box.add_message_item(bubble_msg)
+            self.chat_box.scrollArea.reset_auto_scroll()
+            self.input_field.set_send_button_status(True)
+    
+    # system agent function calling chain END
 
     def set_chat_mode(self):
         print("Chat mode now.")
