@@ -7,7 +7,7 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import QLabel, QSizePolicy, QWidget, QPushButton, QHBoxLayout, QSpacerItem, QVBoxLayout, \
     QApplication
 from PyQt5.QtCore import pyqtSignal, Qt, QThread, QSize, QTimer
-from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QIcon
+from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QIcon, QMovie
 from bs4 import BeautifulSoup
 
 from ui.file_thumbnail import FileThumbnail
@@ -20,6 +20,7 @@ class MessageType(Enum):
     TABLE = "table"
     PAINT = "paint"
     WAITING = "waiting"
+    LOADING = "loading"
 
 
 class TextMessage(QLabel):
@@ -256,6 +257,38 @@ class WaitingMessage(QLabel):
             self.current_image_index += 1
 
 
+class GifLoadingMessage(QWidget):
+    def __init__(self, gif_path, text="", width=24, height=24, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+        # GIF动画
+        self.gif_label = QLabel(self)
+        self.movie = QMovie(gif_path)
+        self.movie.setScaledSize(QSize(width, height))
+        self.gif_label.setMovie(self.movie)
+        self.gif_label.setFixedSize(QSize(width, height))
+        self.movie.start()
+        # 文字
+        self.text_label = QLabel(text, self)
+        self.text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.text_label.setFont(QFont('微软雅黑', 12))
+        self.text_label.setStyleSheet(
+                '''
+                background-color: transparent;
+                border-radius:10px;
+                padding-left:0px;
+                color: white;
+                '''
+            )
+        # 布局
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self.gif_label)
+        layout.addWidget(self.text_label)
+        self.setLayout(layout)
+
+
 class BubbleMessage(QWidget):
     speech_signal = pyqtSignal(bool, str, QWidget)
     delete_signal = pyqtSignal(QWidget)
@@ -365,10 +398,8 @@ class BubbleMessage(QWidget):
         button_layout.setSpacing(16)
         button_layout.setContentsMargins(0, 0, 0, 0)
 
-
-
         if self.user_send:  # 如果是用户发送的消息，则添加space将气泡推到右边
-            message_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            message_layout.addItem(QSpacerItem(45 + 6, 35, QSizePolicy.Expanding, QSizePolicy.Minimum))
             message_layout.addWidget(self.message, 1)
         else:             # 如果是ai回复，则不添加space，直接在左边生成气泡
             message_layout.addWidget(self.message, 1)
@@ -383,13 +414,18 @@ class BubbleMessage(QWidget):
                 self.delete_button.show()
                 button_layout.addWidget(self.delete_button, 0, Qt.AlignLeft)
                 button_layout.addStretch(1)
-            message_layout.addItem(QSpacerItem(45 + 6, 45, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            
+            if self.need_button:
+                message_layout.addItem(QSpacerItem(45 + 6, 35, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            else:
+                message_layout.addItem(QSpacerItem(45 + 6, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         main_layout = QVBoxLayout()
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addLayout(message_layout)
-        main_layout.addLayout(button_layout)
+        if self.need_button:
+            main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
 
     def generate_msg(self, message, msg_type, user_send):
@@ -401,6 +437,8 @@ class BubbleMessage(QWidget):
             message = TableMessage(message, user_send)
         elif msg_type == MessageType.WAITING:
             message = WaitingMessage()
+        elif msg_type == MessageType.LOADING:
+            message = GifLoadingMessage(message.split('|')[0], message.split('|')[1])
         else:
             raise ValueError("未知的消息类型")
         return message
@@ -544,3 +582,10 @@ class ButtonMessage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addLayout(self.button_layout)
         self.setLayout(main_layout)
+
+    def set_text(self, content):
+        self.button.setText(content)
+
+    def set_clickable(self, clickable):
+        self.button.setEnabled(clickable)
+
