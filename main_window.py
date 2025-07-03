@@ -57,6 +57,9 @@ from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 # app_list = json.loads(app_list)
 
 
+logging.basicConfig(level=logging.INFO)
+
+
 class AssistantMode(Enum):
     """
         会议记录时AI助手为meeting模式，界面切换为meeting box，发送的消息类型MessageType是TEXT
@@ -253,11 +256,12 @@ class MainWin(QWidget):
 
         self.mode = AssistantMode.CHAT
         self.current_model = "DeepSeek-V3"
-        self.current_msg = None # string
+        self.current_input = None # string
         self.current_bubble_message = None
         self.current_func = "智能问答"
         self.selected_kb_id_list = []
-        self.function_calling_waiting_message = None
+        self.step = 1
+        self.tool_result = []
 
     def func_init(self):
         self.serverCheck = ServerCheck()
@@ -506,16 +510,12 @@ class MainWin(QWidget):
                 bubble_message.button.clicked.connect(lambda: self.pgen.markdown_to_json(result))
 
         if self.current_func == "系统功能":
-            self.function_call_task = SysAgentFunctionCallTask()
-            self.function_call_task.update_signal.connect(self.update_function_calling_chain)
-            self.function_call_task.complete_signal.connect(self.function_calling_chain_callback)
-            self.function_call_task.set_topic(self.current_msg)
             # 如果还没有加载动画气泡，则添加
-            if not hasattr(self, 'function_calling_waiting_message') or self.function_calling_waiting_message is None:
-                self.function_calling_waiting_message = BubbleMessage('ui/icon/loading.gif| 正在准备工具链', '', MessageType.LOADING, 12, user_send=False)
-                self.chat_box.add_message_item(self.function_calling_waiting_message)
-                self.function_calling_waiting_message.show()
-            self.function_call_task.start()
+            result_bubble = BubbleMessage(f'正在拆解为子任务链...', '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
+            self.chat_box.add_message_item(result_bubble)
+            self.tool_result = []
+            self.step = 1
+            self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
 
         # 重置当前BubbleMessage引用
         self.current_bubble_message = None
@@ -523,7 +523,7 @@ class MainWin(QWidget):
         self.input_field.set_send_button_status(True)
 
     def send_quest_to_ai(self, message):
-        self.current_msg = message
+        self.current_input = message
         self.speech_page.updateStatus('等待中')
         if self.serverCheck.internet_status():
             # Speech.short_text_play("好的，请稍等")
@@ -620,62 +620,72 @@ class MainWin(QWidget):
     # Send End
 
     # system agent function calling chain START
+    def start_function_call_chain(self, user_input, tool_result, result_bubble):
+        content = user_input + "\n工具调用结果：" + "\n".join(
+            f"{tool}: {json.dumps(result, ensure_ascii=False)}"
+            for item in tool_result
+            for tool, result in item.items()
+        ) if len(tool_result) > 0 else user_input
+        logging.info(content)
+        self.function_call_task = SysAgentFunctionCallTask()
+        self.function_call_task.update_signal.connect(self.update_function_calling_chain)
+        self.function_call_task.complete_signal.connect(lambda message: self.function_calling_chain_callback(message, result_bubble))
+        self.function_call_task.set_topic(content)
+        self.function_call_task.start()
+
     def update_function_calling_chain(self, message):
         """function_call_task输出调用工具链的进度"""
         self.input_field.set_send_button_status(False)
 
-    def function_calling_chain_callback(self, message):
-        """调用工具链生成完毕"""
-        # 先把加载动画变成勾号
-        if hasattr(self, 'function_calling_waiting_message') and self.function_calling_waiting_message is not None:
-            # 替换为勾号气泡
-            checkmark_html = '<span style="font-size:20px;color:#4CAF50;">✅</span> 工具链已准备好'
-            self.chat_box.remove_message_item(self.function_calling_waiting_message)
-            self.function_calling_waiting_message = None
-            self.chat_box.add_message_item(BubbleMessage(checkmark_html, '', MessageType.TEXT, 12, need_button=False, user_send=False))
-
-            # 添加仅动画的等待气泡
-            self.function_calling_waiting_message = BubbleMessage('ui/icon/loading.gif|', '', MessageType.LOADING, 12, user_send=False)
-            self.chat_box.add_message_item(self.function_calling_waiting_message)
-            self.function_calling_waiting_message.show()
-            
-            # 1秒后再显示按钮
-            QTimer.singleShot(1000, lambda: self.show_function_call_button(message))
-
-    def show_function_call_button(self, message):
-        # 移除动画气泡
-        if hasattr(self, 'function_calling_waiting_message') and self.function_calling_waiting_message is not None:
-            self.chat_box.remove_message_item(self.function_calling_waiting_message)
-            self.function_calling_waiting_message = None
-            
-        button_msg = ButtonMessage("执行操作", user_send=False)
-        button_msg.button.clicked.connect(lambda: self.sys_function_calling(message, button_msg))
-        self.chat_box.add_message_item(button_msg)
-
-    def sys_function_calling(self, message, button_message):
-        """根据function_call_task输出结果执行对应工具函数"""
-        print(message)
+    def function_calling_chain_callback(self, message, result_bubble):
+        """调用工具链生成完毕"""        
+        actions = json.loads(message.strip())
+        if isinstance(actions, dict):  # 单步
+            actions = [actions]
+        logging.info(actions)
         try:
-            action = json.loads(message.strip())
-            tool_name = action.get("tool")
-            args = action.get("args", {})
-            if tool_name and tool_name in FUNCTION_MAP:
-                func = FUNCTION_MAP[tool_name]
-                output = func(**args)
-                response = f"执行结果：【成功】{output}." if output else f"执行结果：【成功】."
-            else:
-                response = "执行结果：【失败】无法识别的操作或无效的工具名。"
-        except Exception as e:
-            response = f"执行结果：【失败】{str(e)}"
-        finally:
-            button_message.set_text("已执行")
-            button_message.set_clickable(False)
+            need_more_tool = False
+            for action in actions:
+                tool_name = action.get("tool")
+                args = action.get("args", {})
+                need_more_tool |= action.get("need_more_tool", False)
 
-            bubble_msg = BubbleMessage(response.replace('\n','<br>'), '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
-            bubble_msg.speech_signal.connect(self.handle_speech)
-            bubble_msg.update_button_status(True)
+                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + f"正在执行第{self.step}个子任务...")
+                if tool_name and tool_name in FUNCTION_MAP:
+                    func = FUNCTION_MAP[tool_name]
+                    result = func(**args)
+                    self.tool_result.append(result)
+                    logging.info(result)
+                    if result["success"]:
+                        msg = f'子任务{self.step} 执行【成功】：{result["message"]}'
+                    else:
+                        msg = f'执行【失败】：{result["message"]}'
+                    if result.get("data") is not None:
+                        data = result["data"]
+                        if isinstance(data, list):
+                            msg += "<br>" + "<br>".join(str(item) for item in data)
+                        elif isinstance(data, dict):
+                            msg += "<br>" + "<br>".join(f"{k}: {v}" for k, v in data.items())
+                        else:
+                            msg += "<br>" + str(data)
+                else:
+                    msg = "执行【失败】：无法识别的操作或无效的工具名。"
+                
+                result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
+                self.step += 1
+
+            if need_more_tool:
+                self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
+            else:
+                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + "操作已全部完成")
+        
+        except Exception as e:
+            msg = f"执行【失败】{str(e)}"
+            result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
+        finally:
+            result_bubble.speech_signal.connect(self.handle_speech)
+            result_bubble.update_button_status(True)
             
-            self.chat_box.add_message_item(bubble_msg)
             self.chat_box.scrollArea.reset_auto_scroll()
             self.input_field.set_send_button_status(True)
     

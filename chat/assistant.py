@@ -25,7 +25,7 @@ class Assistant:
         self.model = assistant_config.get("model", "DeepSeek-V3")
 
         # 动态插入 function_schemas
-        if assistant_type == "sys_agent":
+        if assistant_type == "sys_agent_function_call" or assistant_type == "sys_agent_explanation":
             self.prompt_template = self.prompt_template.replace(
                 "{function_schemas}", get_function_schemas()
             )

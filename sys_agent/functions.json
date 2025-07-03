@@ -1,118 +1,228 @@
 [
-    {
-      "name": "open_calculator",
-      "description": "打开计算器",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "name": "open_file",
-      "description": "打开指定路径的文件",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "要打开的文件路径"
-          }
-        },
-        "required": ["path"]
-      }
-    },
-    {
-      "name": "list_directory",
-      "description": "列出目录内容",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "要列出的目录路径，默认为当前目录",
-            "default": "."
-          }
-        },
-        "required": []
-      }
-    },
-    {
-      "name": "create_directory",
-      "description": "创建新目录",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "要创建的目录路径"
-          }
-        },
-        "required": ["path"]
-      }
-    },
-    {
-      "name": "create_file",
-      "description": "创建新文件并可写入内容",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "要创建的文件路径"
-          },
-          "content": {
-            "type": "string",
-            "description": "要写入文件的内容，可选"
-          }
-        },
-        "required": ["path"]
-      }
-    },
-    {
-      "name": "delete_file",
-      "description": "删除指定文件",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "要删除的文件路径"
-          }
-        },
-        "required": ["path"]
-      }
-    },
-    {
-      "name": "get_current_directory",
-      "description": "获取当前工作目录",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "name": "shutdown_system",
-      "description": "关机系统",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "name": "run_program",
-      "description": "运行任意命令",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string",
-            "description": "要运行的命令字符串"
-          }
-        },
-        "required": ["command"]
-      }
+  {
+    "name": "open_calculator",
+    "description": "打开计算器",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
     }
-  ]
+  },
+  {
+    "name": "open_file",
+    "description": "打开指定路径的文件",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要打开的文件路径"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "list_directory",
+    "description": "列出目录内容",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要列出的目录路径，默认为当前目录",
+          "default": "."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "create_file",
+    "description": "创建新文件并可写入内容",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要创建的文件路径"
+        },
+        "content": {
+          "type": "string",
+          "description": "要写入文件的内容，可选"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "read_file",
+    "description": "读取文件内容",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要读取的文件路径"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "write_file",
+    "description": "写入内容到文件（覆盖）",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要写入的文件路径"
+        },
+        "content": {
+          "type": "string",
+          "description": "要写入的内容"
+        }
+      },
+      "required": ["path", "content"]
+    }
+  },
+  {
+    "name": "rename_file",
+    "description": "重命名文件或文件夹",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string",
+          "description": "原始路径"
+        },
+        "dst": {
+          "type": "string",
+          "description": "目标路径"
+        }
+      },
+      "required": ["src", "dst"]
+    }
+  },
+  {
+    "name": "copy_file",
+    "description": "复制文件",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string",
+          "description": "源文件路径"
+        },
+        "dst": {
+          "type": "string",
+          "description": "目标文件路径"
+        }
+      },
+      "required": ["src", "dst"]
+    }
+  },
+  {
+    "name": "move_file",
+    "description": "移动文件",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string",
+          "description": "源文件路径"
+        },
+        "dst": {
+          "type": "string",
+          "description": "目标文件路径"
+        }
+      },
+      "required": ["src", "dst"]
+    }
+  },
+  {
+    "name": "create_directory",
+    "description": "创建新目录",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要创建的目录路径"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "delete_file",
+    "description": "删除指定文件",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要删除的文件路径"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "get_current_directory",
+    "description": "获取当前工作目录",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "shutdown_system",
+    "description": "关机系统",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "run_program",
+    "description": "运行任意命令",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "要运行的命令字符串"
+        }
+      },
+      "required": ["command"]
+    }
+  },
+  {
+    "name": "find_file",
+    "description": "在指定目录及其子目录下查找文件，返回所有匹配的文件路径列表",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "要查找的文件名（支持部分匹配或全名）"
+        },
+        "path": {
+          "type": "string",
+          "description": "起始查找目录，默认为当前目录",
+          "default": "."
+        },
+        "nums": {
+          "type": "integer",
+          "description": "最多返回的匹配文件数，-1表示不限制",
+          "default": -1
+        }
+      },
+      "required": ["filename"]
+    }
+  }
+]
