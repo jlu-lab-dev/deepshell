@@ -266,11 +266,20 @@ class GifLoadingMessage(QWidget):
         self.movie = QMovie(gif_path)
         self.movie.setScaledSize(QSize(width, height))
         self.gif_label.setMovie(self.movie)
+        self.gif_label.setFixedSize(QSize(width, height))
         self.movie.start()
-        self.gif_label.setFixedSize(width, height)
         # 文字
         self.text_label = QLabel(text, self)
-        self.text_label.setStyleSheet("background: transparent; margin-left: 6px;")
+        self.text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.text_label.setFont(QFont('微软雅黑', 12))
+        self.text_label.setStyleSheet(
+                '''
+                background-color: transparent;
+                border-radius:10px;
+                padding-left:0px;
+                color: white;
+                '''
+            )
         # 布局
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)

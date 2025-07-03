@@ -3,6 +3,7 @@ import logging
 import re
 from enum import Enum
 import datetime
+from time import sleep
 import PyQt5.sip as sip
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
@@ -631,8 +632,22 @@ class MainWin(QWidget):
             checkmark_html = '<span style="font-size:20px;color:#4CAF50;">✅</span> 工具链已准备好'
             self.chat_box.remove_message_item(self.function_calling_waiting_message)
             self.function_calling_waiting_message = None
-            self.chat_box.add_message_item(BubbleMessage(checkmark_html, '', MessageType.TEXT, 12, need_button=False, user_send=False))            
+            self.chat_box.add_message_item(BubbleMessage(checkmark_html, '', MessageType.TEXT, 12, need_button=False, user_send=False))
 
+            # 添加仅动画的等待气泡
+            self.function_calling_waiting_message = BubbleMessage('ui/icon/loading.gif|', '', MessageType.LOADING, 12, user_send=False)
+            self.chat_box.add_message_item(self.function_calling_waiting_message)
+            self.function_calling_waiting_message.show()
+            
+            # 1秒后再显示按钮
+            QTimer.singleShot(1000, lambda: self.show_function_call_button(message))
+
+    def show_function_call_button(self, message):
+        # 移除动画气泡
+        if hasattr(self, 'function_calling_waiting_message') and self.function_calling_waiting_message is not None:
+            self.chat_box.remove_message_item(self.function_calling_waiting_message)
+            self.function_calling_waiting_message = None
+            
         button_msg = ButtonMessage("执行操作", user_send=False)
         button_msg.button.clicked.connect(lambda: self.sys_function_calling(message, button_msg))
         self.chat_box.add_message_item(button_msg)

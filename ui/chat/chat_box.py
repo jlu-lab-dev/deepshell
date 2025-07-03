@@ -145,7 +145,7 @@ class ChatBox(QWidget):
             self.spacerItemAdded = True
 
     def remove_message_item(self, bubble_message):
-        self.delete_index_history.emit(bubble_message.message.text())
+        # self.delete_index_history.emit(bubble_message.message.text())
         self.msg_layout.removeWidget(bubble_message)
         bubble_message.hide()
 
