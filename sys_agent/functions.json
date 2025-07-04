@@ -224,5 +224,73 @@
       },
       "required": ["filename"]
     }
+  },
+  {
+    "name": "set_wallpaper",
+    "description": "设置桌面壁纸（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "image_path": {
+          "type": "string",
+          "description": "要设置为壁纸的图片文件路径"
+        }
+      },
+      "required": ["image_path"]
+    }
+  },
+  {
+    "name": "open_control_panel",
+    "description": "打开控制面板（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "open_network_settings",
+    "description": "打开网络设置（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "open_display_settings",
+    "description": "打开显示设置（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "open_sound_settings",
+    "description": "打开声音设置（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "open_bluetooth_settings",
+    "description": "打开蓝牙设置（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "lock_screen",
+    "description": "锁定屏幕（仅Windows）",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
   }
 ]

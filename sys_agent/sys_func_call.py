@@ -3,6 +3,7 @@ import json
 import platform
 import shutil
 import subprocess
+import ctypes
 
 def expanduser(path):
     """兼容 Windows 的 os.path.expanduser 实现"""
@@ -183,6 +184,77 @@ def find_file(filename, path=".", nums=-1):
     except Exception as e:
         return atomic_result(False, f"查找文件失败: {e}")
 
+def set_wallpaper(image_path):
+    try:
+        image_path = expanduser(os.path.normpath(image_path))
+        if not os.path.exists(image_path):
+            return atomic_result(False, f"图片文件不存在: {image_path}")
+        # SPI_SETDESKWALLPAPER = 20
+        ctypes.windll.user32.SystemParametersInfoW(20, 0, image_path, 3)
+        return atomic_result(True, "壁纸设置成功")
+    except Exception as e:
+        return atomic_result(False, f"设置壁纸失败: {e}")
+
+def open_control_panel():
+    try:
+        if os.name == 'nt':
+            os.system("control")
+            return atomic_result(True, "已打开控制面板")
+        else:
+            return atomic_result(False, "当前系统不支持此操作")
+    except Exception as e:
+        return atomic_result(False, f"打开控制面板失败: {e}")
+
+def open_network_settings():
+    try:
+        if os.name == 'nt':
+            os.system("start ms-settings:network")
+            return atomic_result(True, "已打开网络设置")
+        else:
+            return atomic_result(False, "当前系统不支持此操作")
+    except Exception as e:
+        return atomic_result(False, f"打开网络设置失败: {e}")
+
+def open_display_settings():
+    try:
+        if os.name == 'nt':
+            os.system("start ms-settings:display")
+            return atomic_result(True, "已打开显示设置")
+        else:
+            return atomic_result(False, "当前系统不支持此操作")
+    except Exception as e:
+        return atomic_result(False, f"打开显示设置失败: {e}")
+
+def open_sound_settings():
+    try:
+        if os.name == 'nt':
+            os.system("start ms-settings:sound")
+            return atomic_result(True, "已打开声音设置")
+        else:
+            return atomic_result(False, "当前系统不支持此操作")
+    except Exception as e:
+        return atomic_result(False, f"打开声音设置失败: {e}")
+
+def open_bluetooth_settings():
+    try:
+        if os.name == 'nt':
+            os.system("start ms-settings:bluetooth")
+            return atomic_result(True, "已打开蓝牙设置")
+        else:
+            return atomic_result(False, "当前系统不支持此操作")
+    except Exception as e:
+        return atomic_result(False, f"打开蓝牙设置失败: {e}")
+
+def lock_screen():
+    try:
+        if os.name == 'nt':
+            ctypes.windll.user32.LockWorkStation()
+            return atomic_result(True, "已锁定屏幕")
+        else:
+            return atomic_result(False, "当前系统不支持此操作")
+    except Exception as e:
+        return atomic_result(False, f"锁定屏幕失败: {e}")
+
 # 工具映射表
 FUNCTION_MAP = {
     "open_calculator": open_calculator,
@@ -200,6 +272,13 @@ FUNCTION_MAP = {
     "shutdown_system": shutdown_system,
     "run_program": run_program,
     "find_file": find_file,
+    "set_wallpaper": set_wallpaper,
+    "open_control_panel": open_control_panel,
+    "open_network_settings": open_network_settings,
+    "open_display_settings": open_display_settings,
+    "open_sound_settings": open_sound_settings,
+    "open_bluetooth_settings": open_bluetooth_settings,
+    "lock_screen": lock_screen,
 }
 
 def get_function_schemas():
@@ -208,4 +287,8 @@ def get_function_schemas():
     with open(json_path, "r", encoding="utf-8") as f:
         FUNCTION_SCHEMAS = json.load(f)
         return json.dumps(FUNCTION_SCHEMAS, ensure_ascii=False, indent=2)
+
+if __name__ == "__main__":
+    set_wallpaper(r"D:\AS\书影音\照片\cloud.jpg")
+
     

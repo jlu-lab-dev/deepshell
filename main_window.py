@@ -658,9 +658,9 @@ class MainWin(QWidget):
                     self.tool_result.append(result)
                     logging.info(result)
                     if result["success"]:
-                        msg = f'子任务{self.step} 执行【成功】：{result["message"]}'
+                        msg = f'子任务{self.step} 执行【成功】：\n{result["message"]}'
                     else:
-                        msg = f'执行【失败】：{result["message"]}'
+                        msg = f'执行【失败】：\n{result["message"]}'
                     if result.get("data") is not None:
                         data = result["data"]
                         if isinstance(data, list):
@@ -670,7 +670,7 @@ class MainWin(QWidget):
                         else:
                             msg += "<br>" + str(data)
                 else:
-                    msg = "执行【失败】：无法识别的操作或无效的工具名。"
+                    msg = "执行【失败】：\n无法识别的操作或无效的工具名。"
                 
                 result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
                 self.step += 1
@@ -681,7 +681,7 @@ class MainWin(QWidget):
                 result_bubble.message.update_text(result_bubble.message.text() + "<br>" + "操作已全部完成")
         
         except Exception as e:
-            msg = f"执行【失败】{str(e)}"
+            msg = f"执行【失败】：\n{str(e)}"
             result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
         finally:
             result_bubble.speech_signal.connect(self.handle_speech)
