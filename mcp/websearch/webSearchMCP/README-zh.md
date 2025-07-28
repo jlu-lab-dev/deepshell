@@ -1,6 +1,6 @@
 # Open-WebSearch MCP 服务器
 
-[English](./README.md)
+[English](README.md)
 
 一个基于多引擎搜索结果的模型上下文协议(MCP)服务器，支持免费网络搜索，无需API密钥。
 
