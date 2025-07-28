@@ -1,9 +1,10 @@
 import json
 import logging
 import re
-from enum import Enum
 import datetime
 import PyQt5.sip as sip
+
+from enum import Enum
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy, QMenu, QLabel
@@ -14,46 +15,43 @@ from ai_table.gen_table import generate_table
 from ai_table.intro_ui import TableIntroPage
 from ai_table.table_task import TableTask
 from audio_transcription.intro_ui import AudioTranscriptionIntroPage
+from audio_transcription.transcriptionTask import TranscriptionTask
+from ocr.intro_ui import OcrIntroPage
+from ocr.ocr_task import OcrTask
 from meeting.intro_ui import MeetingIntroPage
+from meeting.meeting_box import MeetingWidget
+from meeting.meeting_btn_widget import MeetingBottomWidget
+from meeting.meeting_task import MeetingTask, MeetingFile
 from mind_map.intro_ui import MindMapIntroPage
+from mind_map.map_task import MapTask
 from ppt.intro_ui import PPTIntroPage
+from ppt.workflow.ppt_task import PPTTask
+from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 from sys_agent.intro_ui import SysFuncIntro
 from sys_agent.sys_func_call import FUNCTION_MAP
 from sys_agent.sys_agent_task import SysAgentExplanationTask, SysAgentFunctionCallTask
 from translation.intro_ui import TranslateIntroPage
-from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage ,ThumbnailMessage,ButtonMessage
-from meeting.meeting_box import MeetingWidget
-from ui.chat.chat_box import ChatBox
+from translation.translate_task import TranslateTask
+from translation.translate_detect import TranslateDetect
 from chat.chat_task import ChatTask
 from chat.intro_page import ChatIntroPage
 from speech.voice_recognition import VoiceRecognition
 from speech.speech_task import Speech, SpeechTask
-from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
-from ui.button.model_select_button import ModelSelectButton
 from utils.intro_ui import DocAnalysisIntroPage
 from utils.open_local_app_task import OpenLocalAppTask
+from utils.workflow.document_task import DocumentTask
 from draw.drawing_task import AiDrawingTask
 from server_check import ServerCheck
-from meeting.meeting_btn_widget import MeetingBottomWidget
-from meeting.meeting_task import MeetingTask, MeetingFile
+from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
+from ui.button.model_select_button import ModelSelectButton
+from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage ,ThumbnailMessage,ButtonMessage
+from ui.chat.chat_box import ChatBox
 from ui.page.speech_page import SpeechPage
 from ui.button.function_menu_button import FunctionMenuButton
 from ui.input_field import InputField
 from ui.knowledge_base.knowledge_base_home import KnowledgeBaseHome
-from ocr.intro_ui import OcrIntroPage
 from ui.button.new_dialog_button import NewDialogButton
-from ppt.workflow.ppt_task import PPTTask
-from utils.workflow.document_task import DocumentTask
 from config.config_manager import ConfigManager
-from ocr.ocr_task import OcrTask
-from translation.translate_task import TranslateTask
-from mind_map.map_task import MAPTask
-from audio_transcription.transcriptionTask import TranscriptionTask
-from translation.translate_detect import TranslateDetect
-from ppt.makePPTByTemplate.mdtojson import PPTGenerator
-
-# app_list = '[{"打开系统设置": "found-control-center"}, {"打开应用商店": "ai-assistant open-appstore"}, {"打开视频播放器": "ai-assistant open-video-player"},  {"打开浏览器": "nfs-browser"},{"打开文本编辑器":"ai-assistant open-txt"}, {"打开日历":"ai-assistant open-calender"},{"调高音量":"ai-assistant  set-volume-up"},{"调低音量":"ai-assistant  set-volume-down"},{"调高屏幕亮度":"ai-assistant  set-brightness-up"},{"调低屏幕亮度":"ai-assistant  set-brightness-down"},{"打开登录密码设置":"ai-assistant set-password"},{"打开屏幕分辨率设置":"ai-assistant set-display"},{"打开默认程序设置":"ai-assistant set-default-apps"},{"打开系统主题设置":"ai-assistant set-theme"},{"打开字体设置":"ai-assistant set-font"},{"打开系统音量设置":"ai-assistant set-sound"},{"打开系统时间设置":"ai-assistant set-datetime"},{"打开节能模式设置":"ai-assistant set-powersave-mode"},{"打开锁屏时间设置":"ai-assistant set-lock"},{"查询系统版本信息":"ai-assistant get-system-info"},{"查询CPU信息":"ai-assistant get-cpu-info"},{"查询内核版本":"ai-assistant get-kernel-info"},{"查询内存信息":"ai-assistant get-memory-info"},{"打开壁纸设置":"ai-assistant set-background"},{"打开网络设置":"ai-assistant set-network"},{"打开屏保设置":"ai-assistant set-screensaver"},{"打开邮箱":"ai-assistant open-email"},{"打开系统帮助":"ai-assistant open-system-help"},{"打开文件管理器":"ai-assistant open-file-manager"},{"打开资源监视器":"ai-assistant open-stacer"},{"打开文档查看器":"ai-assistant open-document-viewer"},{"打开终端":"ai-assistant open-terminal"},{"打开压缩工具":"ai-assistant open-file-compress"},{"打开计算器":"ai-assistant open-calculator"},{"打开wifi设置":"ai-assistant set-wifi"},{"打开蓝牙设置":"ai-assistant set-bluetooth"},{"打开画板":"ai-assistant open-drawing-board"},{"关闭画板":"killall nfs-drawing"},{"关闭应用商店":"ai-assistant close-appstore"},{"关闭视频播放器":"ai-assistant close-video-player"},{"打开音乐播放器":"ai-assistant open-music"},{"关闭音乐播放器":"ai-assistant close-music"},{"关闭文本编辑器":"ai-assistant close-txt"},{"关闭计算器":"ai-assistant close-calculator"},{"关闭系统设置":"killall found-control-center"},{"关闭浏览器":"killall nfs-browser"},{"关闭终端":"killall gnome-terminal-server"},{"关闭资源监视器":"killall stacer"},{"关闭邮箱":"killall thunderbird"},{"关闭wifi设置":"killall found-control-center"},{"关闭蓝牙设置":"killall blueman-manager"},{"关闭系统帮助":"killall evince"}, {"打开摄像头工具":"cheese"},{"关闭摄像头工具":"killall cheese"}]'
-# app_list = json.loads(app_list)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -405,7 +403,7 @@ class MainWin(QWidget):
             #     self.sendTask = TranslateTask()
             case "思维导图":
                 self.mode = AssistantMode.CHAT
-                self.sendTask = MAPTask()
+                self.sendTask = MapTask()
             # case "音频转写":
             #     self.mode = AssistantMode.CHAT
             #     self.sendTask = TranscriptionTask()
