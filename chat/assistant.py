@@ -5,7 +5,7 @@ from typing import Optional
 from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
 from rag.rag_manager import RAGManager
-from chat.web_search_manager import WebSearchManager
+from mcp.websearch.web_search_manager import WebSearchManager
 from sys_agent.sys_func_call import get_function_schemas
 
 class Assistant:

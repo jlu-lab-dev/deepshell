@@ -172,6 +172,7 @@ class MainWin(QWidget):
         self.input_field = InputField()
         self.input_field.hide()
         self.input_field.send_signal.connect(self.handle_send_message)
+        self.input_field.websearch_signal.connect(self.set_websearch_enabled)
 
         self.meeting_bottom_ui = MeetingBottomWidget()
         self.meeting_bottom_ui.hide()
@@ -264,9 +265,6 @@ class MainWin(QWidget):
         # system function setting
         self.chain_step = 1
         self.tool_result = []
-
-        # web search setting
-        self.enable_websearch = False
 
     def func_init(self):
         self.serverCheck = ServerCheck()
@@ -861,6 +859,10 @@ class MainWin(QWidget):
             self.meetingTask.stop_task()
             self.show_meeting_waiting_message(False)
     # 会议功能 End
+
+    def set_websearch_enabled(self, enabled):
+        if hasattr(self, 'sendTask'):
+            self.sendTask.set_websearch_enabled(enabled)
 
     def switch_model(self, model):
         """传入模型名，如Qwen-Max、DeepSeek-V3，非中文名"""

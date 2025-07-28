@@ -1,7 +1,7 @@
 import json
 import requests
 import uuid
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import logging
 from utils.decorators import singleton
 from config.config_manager import ConfigManager
