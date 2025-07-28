@@ -13,7 +13,7 @@ class Assistant:
         self.session_id = session_id or str(uuid.uuid4())
         self.model_manager = ModelManager()
         self.rag_manager = RAGManager()
-        self.web_search_manager = WebSearchManager()
+        self.web_search_manager = WebSearchManager(is_enabled=False)
         self._load_assistant_config(assistant_type)
 
     def _load_assistant_config(self, assistant_type: str) -> None:

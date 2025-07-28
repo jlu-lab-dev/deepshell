@@ -6,10 +6,10 @@ class ChatTask(QThread):
     complete_signal = pyqtSignal(str)  # 用于通知完成
     update_signal = pyqtSignal(str)  # 用于流式更新内容
 
-    def __init__(self):
-        super(ChatTask, self).__init__()
+    def __init__(self, assistant_type='general'):
+        super().__init__()
         self.topic = ""
-        self.assistant = Assistant('general')
+        self.assistant = Assistant(assistant_type)
         self.stop_flag = False    # 对话停止标志
 
     def set_topic(self, topic):

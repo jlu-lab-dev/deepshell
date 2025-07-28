@@ -3,7 +3,6 @@ import logging
 import re
 from enum import Enum
 import datetime
-from time import sleep
 import PyQt5.sip as sip
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
@@ -254,14 +253,22 @@ class MainWin(QWidget):
             }
         }
 
+        # mode setting
         self.mode = AssistantMode.CHAT
         self.current_model = "DeepSeek-V3"
-        self.current_input = None # string
+        self.current_input = None    # string
         self.current_bubble_message = None
         self.current_func = "智能问答"
+
+        # knowledge base setting
         self.selected_kb_id_list = []
-        self.step = 1
+
+        # system function setting
+        self.chain_step = 1
         self.tool_result = []
+
+        # web search setting
+        self.enable_websearch = False
 
     def func_init(self):
         self.serverCheck = ServerCheck()
@@ -514,7 +521,7 @@ class MainWin(QWidget):
             result_bubble = BubbleMessage(f'正在拆解为子任务链...', '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             self.chat_box.add_message_item(result_bubble)
             self.tool_result = []
-            self.step = 1
+            self.chain_step = 1
             self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
 
         # 重置当前BubbleMessage引用
@@ -648,7 +655,7 @@ class MainWin(QWidget):
                 args = action.get("args", {})
                 need_more_tool |= action.get("need_more_tool", False)
 
-                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + f"正在执行第{self.step}个子任务...")
+                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + f"正在执行第{self.chain_step}个子任务...")
                 if tool_name and tool_name in FUNCTION_MAP:
                     func = FUNCTION_MAP[tool_name]
                     result = func(**args)
@@ -658,7 +665,7 @@ class MainWin(QWidget):
                     self.tool_result.append(result)
                     logging.info(result)
                     if result["success"]:
-                        msg = f'子任务{self.step} 执行【成功】：\n{result["message"]}'
+                        msg = f'子任务{self.chain_step} 执行【成功】：\n{result["message"]}'
                     else:
                         msg = f'执行【失败】：\n{result["message"]}'
                     if result.get("data") is not None:
@@ -673,7 +680,7 @@ class MainWin(QWidget):
                     msg = "执行【失败】：\n无法识别的操作或无效的工具名。"
                 
                 result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
-                self.step += 1
+                self.chain_step += 1
 
             if need_more_tool:
                 self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
@@ -861,12 +868,13 @@ class MainWin(QWidget):
         """传入模型名，如Qwen-Max、DeepSeek-V3，非中文名"""
         self.current_model = model
         self.sendTask.assistant.switch_model(model)
-        
-        
+
     def handle_gen_ppt(self,full_path):
         thumbnail_message = ThumbnailMessage(user_send=False,file_path =full_path)
         self.chat_box.scrollArea.reset_auto_scroll()
         self.chat_box.add_message_item(thumbnail_message)
+
+
 # 菜单
 class SettingMenu(QMenu):
     def __init__(self, *args, **kwargs):

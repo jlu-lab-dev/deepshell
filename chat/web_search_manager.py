@@ -11,11 +11,11 @@ from config.config_manager import ConfigManager
 class WebSearchManager:
     """Web search manager that interfaces with MCP search service"""
     
-    def __init__(self):
+    def __init__(self, is_enabled=True):
         self.config_manager = ConfigManager()
         self.mcp_url = "http://localhost:3000/mcp"
         self.session_id = None
-        self.is_enabled = True  # 可以通过配置控制
+        self.is_enabled = is_enabled
         
     def _initialize_session(self) -> bool:
         """Initialize MCP session"""
