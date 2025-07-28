@@ -46,3 +46,10 @@ $ ./.venv/Scripts/python singleton_app.py
 (4) 会议记录功能需要下载ffmpeg之后才能使用，配置好ffmpeg之后首次运行会自动下载依赖
 
 [FFmpeg配置](https://blog.csdn.net/Natsuago/article/details/143231558)
+
+(5) 联网搜索功能需到.\mcp\websearch\webSearchMCP目录下启动mcp服务器，执行以下命令以启动：
+```
+$ npm install
+$ npm run dev
+```
+该功能将在本地的3000端口上运行。
