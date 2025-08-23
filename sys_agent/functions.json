@@ -292,5 +292,33 @@
       "properties": {},
       "required": []
     }
+  },
+  {
+    "name": "open_browser",
+    "description": "打开默认浏览器",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "search_in_browser",
+    "description": "在默认浏览器中搜索指定关键词，可选择搜索引擎（google、bing、baidu）",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "要搜索的内容"
+        },
+        "engine": {
+          "type": "string",
+          "description": "搜索引擎，支持 google、bing、baidu",
+          "default": "bing"
+        }
+      },
+      "required": ["query"]
+    }
   }
 ]

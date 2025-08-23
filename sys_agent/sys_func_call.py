@@ -4,6 +4,8 @@ import platform
 import shutil
 import subprocess
 import ctypes
+import webbrowser
+import urllib.parse
 
 def expanduser(path):
     """兼容 Windows 的 os.path.expanduser 实现"""
@@ -255,6 +257,46 @@ def lock_screen():
     except Exception as e:
         return atomic_result(False, f"锁定屏幕失败: {e}")
 
+def open_browser():
+    """
+    打开默认浏览器的首页。
+    :return: dict 包含 success 与 message
+    """
+    try:
+        webbrowser.open("about:blank")  # 打开空白页
+        return {"success": True, "message": "浏览器已打开"}
+    except Exception as e:
+        return {"success": False, "message": f"打开浏览器失败: {e}"}
+
+def search_in_browser(query, engine="bing"):
+    """
+    打开浏览器并搜索指定关键词。
+
+    :param query: 要搜索的内容
+    :param engine: 搜索引擎，可选值 "google"、"bing"、"baidu"（默认 google）
+    :return: 操作结果提示信息
+    """
+    try:
+        # URL encode
+        encoded_query = urllib.parse.quote(query)
+
+        # 根据搜索引擎选择 URL
+        if engine.lower() == "google":
+            url = f"https://www.google.com/search?q={encoded_query}"
+        elif engine.lower() == "bing":
+            url = f"https://www.bing.com/search?q={encoded_query}"
+        elif engine.lower() == "baidu":
+            url = f"https://www.baidu.com/s?wd={encoded_query}"
+        else:
+            return {"success": False, "message": f"不支持的搜索引擎: {engine}"}
+
+        # 打开浏览器
+        webbrowser.open(url)
+        return {"success": True, "message": f"已在浏览器中打开 {engine} 搜索页面: {query}"}
+    except Exception as e:
+        return {"success": False, "message": f"搜索失败: {e}"}
+
+
 # 工具映射表
 FUNCTION_MAP = {
     "open_calculator": open_calculator,
@@ -279,6 +321,8 @@ FUNCTION_MAP = {
     "open_sound_settings": open_sound_settings,
     "open_bluetooth_settings": open_bluetooth_settings,
     "lock_screen": lock_screen,
+    "open_browser": open_browser,
+    "search_in_browser": search_in_browser,
 }
 
 def get_function_schemas():
