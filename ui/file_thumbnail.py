@@ -43,7 +43,8 @@ class FileThumbnail(QLabel):
     def create_img_thumbnail(self):
         self.setFixedSize(60, 60)
         self.setStyleSheet("""
-                    background: #30425C;
+                    background: #2b2b2b;
+                    border: 1px solid #3c3c3c;
                     border-radius: 8px;
                 """)
 
@@ -56,7 +57,8 @@ class FileThumbnail(QLabel):
     def create_doc_card(self):
         self.setFixedSize(144, 60)
         self.setStyleSheet("""
-            background: #30425C;
+            background: #2b2b2b;
+            border: 1px solid #3c3c3c;
             border-radius: 8px;
         """)
 

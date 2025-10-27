@@ -11,6 +11,7 @@ from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QIcon, QMovie
 from bs4 import BeautifulSoup
 
 from ui.file_thumbnail import FileThumbnail
+from ui.theme_manager import ThemeManager
 
 
 # 返回消息的类型
@@ -28,7 +29,9 @@ class TextMessage(QLabel):
         super(TextMessage, self).__init__(text, parent)
         self.msg_text = text
         self.user_send = user_send
+        self.theme_manager = ThemeManager()
         self.init_ui()
+        self.theme_manager.theme_changed.connect(self.apply_theme)
 
     def init_ui(self):
         self.setMaximumWidth(450)
@@ -42,27 +45,9 @@ class TextMessage(QLabel):
         self.original_markdown_text = self.msg_text
         html_text = markdown.markdown(self.msg_text)
         self.setText(html_text)
-
-        if self.user_send:
-            self.setAlignment(Qt.AlignLeft)
-            self.setStyleSheet(
-                '''
-                background-color: rgba(0,93,255,204);
-                border-radius:10px;
-                padding:10px;
-                color: white;
-                '''
-            )
-        else:
-            self.setAlignment(Qt.AlignLeft)
-            self.setStyleSheet(
-                '''
-                background-color: transparent;
-                border-radius:10px;
-                padding-left:0px;
-                color: white;
-                '''
-            )
+        self.setAlignment(Qt.AlignLeft)
+        
+        self.apply_theme()
 
         self.font_metrics = QFontMetrics(QFont('微软雅黑', 12))
         if self.user_send:
@@ -78,6 +63,24 @@ class TextMessage(QLabel):
     def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
         super(TextMessage, self).paintEvent(a0)
 
+    def apply_theme(self, theme_name=None):
+        """应用主题"""
+        colors = self.theme_manager.get_colors()
+        if self.user_send:
+            self.setStyleSheet(f'''
+                background-color: {colors['user_message_bg']};
+                border-radius:12px;
+                padding:10px;
+                color: {colors['message_text']};
+            ''')
+        else:
+            self.setStyleSheet(f'''
+                background-color: {colors['ai_message_bg']};
+                border-radius:12px;
+                padding-left:0px;
+                color: {colors['message_text']};
+            ''')
+    
     def update_text(self, text):
         self.original_markdown_text = text
         html_text = markdown.markdown(text)
@@ -124,7 +127,9 @@ class TableMessage(QLabel):
         super(TableMessage, self).__init__(parent)
         self.msg_text = text
         self.user_send = user_send
+        self.theme_manager = ThemeManager()
         self.init_ui()
+        self.theme_manager.theme_changed.connect(self.apply_theme)
 
     def init_ui(self):
         self.setWordWrap(True)
@@ -134,28 +139,12 @@ class TableMessage(QLabel):
 
         # 解析内容并设置初始文本
         self.update_text(markdown.markdown(self.msg_text))
-
-        # 样式设置（减少padding）
-        if self.user_send:
-            self.setAlignment(Qt.AlignLeft)
-            self.setStyleSheet(
-                '''
-                background-color: rgba(0,93,255,204);
-                border-radius:10px;
-                padding:10px;
-                color: white;
-                '''
-            )
-        else:
-            self.setAlignment(Qt.AlignLeft)
-            self.setStyleSheet(
-                '''
-                background-color: transparent;
-                border-radius:10px;
-                padding-left:0px;
-                color: white;
-                '''
-            )
+        
+        # 设置对齐方式
+        self.setAlignment(Qt.AlignLeft)
+        
+        # 应用主题样式
+        self.apply_theme()
 
     def parse_table_data(self, text):
         """生成紧凑型HTML表格"""
@@ -214,6 +203,24 @@ class TableMessage(QLabel):
 
         self.adjustSize()  # 关键：让QLabel根据内容调整尺寸
 
+    def apply_theme(self, theme_name=None):
+        """应用主题"""
+        colors = self.theme_manager.get_colors()
+        if self.user_send:
+            self.setStyleSheet(f'''
+                background-color: {colors['user_message_bg']};
+                border-radius:12px;
+                padding:10px;
+                color: {colors['message_text']};
+            ''')
+        else:
+            self.setStyleSheet(f'''
+                background-color: {colors['ai_message_bg']};
+                border-radius:12px;
+                padding-left:0px;
+                color: {colors['message_text']};
+            ''')
+    
     def sizeHint(self):
         """覆盖默认尺寸计算"""
         hint = super().sizeHint()
@@ -229,10 +236,10 @@ class WaitingMessage(QLabel):
         self.setFixedSize(QSize(95, 36))
         self.setStyleSheet(
             '''
-            background-color: rgba(235,235,235,204);
+            background-color: #3f3f46;
             border-radius:10px;
             padding:10px;
-            color: white;
+            color: #e2e8f0;
             '''
         )
 
@@ -277,7 +284,7 @@ class GifLoadingMessage(QWidget):
                 background-color: transparent;
                 border-radius:10px;
                 padding-left:0px;
-                color: white;
+                color: #e2e8f0;
                 '''
             )
         # 布局
@@ -303,31 +310,44 @@ class BubbleMessage(QWidget):
         self.user_send = user_send
         self.need_button = need_button
         self.thumbnail_list = thumbnail_list
+        self.theme_manager = ThemeManager()
 
         self.isPlayAudio = False
 
         self.init_ui()
+        
+        # 连接主题切换信号
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
     def init_ui(self):
         self.setStyleSheet(
             '''
-                background: #1A88FF;
-                box-shadow: 0px 2px 10px 0px rgba(0,0,0,0.2);
+                background: transparent;
                 border-radius: 8px;
             '''
         )
 
+        # 按钮样式 - Cursor风格
+        self.button_style_template = """
+            QPushButton {{
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: 6px;
+                padding: 2px;
+            }}
+            QPushButton:hover {{
+                background-color: {hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {pressed};
+            }}
+        """
+        
         # 播放按钮
         self.play_button = QPushButton(self)
-        self.play_button.setFixedSize(QSize(16, 16))
-        self.play_button.setStyleSheet(
-            '''
-            background-color: transparent;
-            border:none;
-            '''
-        )
+        self.play_button.setFixedSize(QSize(20, 20))
         self.play_button.setIcon(QIcon('ui/icon/icon_播放_侧边栏模式@2x.png'))
-        self.play_button.setIconSize(QSize(16, 16))
+        self.play_button.setIconSize(QSize(14, 14))
         self.play_button.clicked.connect(self.playAudio)
         self.play_button.setFlat(True)
         self.play_button.setEnabled(False)
@@ -335,17 +355,9 @@ class BubbleMessage(QWidget):
 
         # 拷贝按钮
         self.copy_button = QPushButton(self)
-        self.copy_button.setFixedSize(QSize(16, 16))
-        self.copy_button.setStyleSheet(
-            '''
-            background-color: transparent;
-            border:none;
-            padding: 0px;
-            margin: 0px;
-            '''
-        )
+        self.copy_button.setFixedSize(QSize(20, 20))
         self.copy_button.setIcon(QIcon('ui/icon/icon_对话_拷贝.png'))
-        self.copy_button.setIconSize(QSize(16, 16))
+        self.copy_button.setIconSize(QSize(14, 14))
         self.copy_button.clicked.connect(self.copy_text)
         self.copy_button.setFlat(True)
         self.copy_button.setEnabled(False)
@@ -353,17 +365,9 @@ class BubbleMessage(QWidget):
 
         # markdown按钮
         self.markdown_button = QPushButton(self)
-        self.markdown_button.setFixedSize(QSize(16, 16))
-        self.markdown_button.setStyleSheet(
-            '''
-            background-color: transparent;
-            border:none;
-            padding: 0px;
-            margin: 0px;
-            '''
-        )
+        self.markdown_button.setFixedSize(QSize(20, 20))
         self.markdown_button.setIcon(QIcon('ui/icon/icon_对话_markdown.png'))
-        self.markdown_button.setIconSize(QSize(16, 16))
+        self.markdown_button.setIconSize(QSize(14, 14))
         self.markdown_button.clicked.connect(self.copy_markdown)
         self.markdown_button.setEnabled(False)
         self.markdown_button.setFlat(True)
@@ -371,21 +375,16 @@ class BubbleMessage(QWidget):
 
         # 删除按钮
         self.delete_button = QPushButton(self)
-        self.delete_button.setFixedSize(QSize(16, 16))
-        self.delete_button.setStyleSheet(
-            '''
-            background-color: transparent;
-            border:none;
-            padding: 0px;
-            margin: 0px;
-            '''
-        )
+        self.delete_button.setFixedSize(QSize(20, 20))
         self.delete_button.clicked.connect(self.delete_message)
         self.delete_button.setIcon(QIcon('ui/icon/icon_对话_删除.png'))
-        self.delete_button.setIconSize(QSize(16, 16))
+        self.delete_button.setIconSize(QSize(14, 14))
         self.delete_button.setEnabled(False)
         self.delete_button.setFlat(True)
         self.delete_button.hide()
+        
+        # 应用按钮主题
+        self.apply_button_theme()
 
         # 根据消息类型创建消息
         self.message = self.generate_msg(self.message, self.msg_type, self.user_send)
@@ -485,6 +484,24 @@ class BubbleMessage(QWidget):
     def delete_message(self):
         self.delete_signal.emit(self)
 
+    def on_theme_changed(self, theme_name):
+        """主题切换回调"""
+        self.apply_button_theme()
+    
+    def apply_button_theme(self):
+        """应用按钮主题"""
+        colors = self.theme_manager.get_colors()
+        button_style = self.button_style_template.format(
+            bg=colors['button_bg'],
+            border=colors['button_border'],
+            hover=colors['button_hover'],
+            pressed=colors.get('button_pressed', colors['button_bg'])
+        )
+        self.play_button.setStyleSheet(button_style)
+        self.copy_button.setStyleSheet(button_style)
+        self.markdown_button.setStyleSheet(button_style)
+        self.delete_button.setStyleSheet(button_style)
+    
     def update_button_status(self, status):
         self.copy_button.setEnabled(status)
         self.play_button.setEnabled(status)
@@ -509,8 +526,7 @@ class ThumbnailMessage(QWidget):
     def init_ui(self):
         self.setStyleSheet(
             '''
-                background: #1A88FF;
-                box-shadow: 0px 2px 10px 0px rgba(0,0,0,0.2);
+                background: transparent;
                 border-radius: 8px;
             '''
         )
@@ -547,16 +563,19 @@ class ButtonMessage(QWidget):
         # 设置圆角、边框及背景色样式
         self.button.setStyleSheet("""
             QPushButton {
-                background-color: #1A88FF;
-                color: #FFFFFF;
-                font-size: 16px;
-                padding: 8px;  
+                background-color: #2d3748;
+                color: #e2e8f0;
+                font-size: 14px;
+                padding: 8px 16px;
+                border: 1px solid #4a5568;
+                border-radius: 6px;
             }
             QPushButton:hover {
-                background-color: #c0c0c0;
+                background-color: #374151;
+                border-color: #6b7280;
             }
             QPushButton:pressed {
-                background-color: #a6a6a6;
+                background-color: #1f2937;
             }
         """)
         self.init_ui()
@@ -564,7 +583,7 @@ class ButtonMessage(QWidget):
     def init_ui(self):
         self.setStyleSheet(
             '''
-                background: #1A88FF;
+                background: transparent;
                 border-radius: 7px;
             '''
         )

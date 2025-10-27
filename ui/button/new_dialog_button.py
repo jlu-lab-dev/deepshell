@@ -17,10 +17,16 @@ class NewDialogButton(QPushButton):
             QPushButton{
                     width: 102px;
                     height: 36px;
-                    background: #30425C;
+                    background: #2b2b2b;
+                    border: 1px solid #3c3c3c;
                     border-radius: 8px;
-                    opacity: 0.4;
                 }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+            }
+            QPushButton:pressed {
+                background-color: #1e1e1e;
+            }
         ''')
 
         self.icon_label = QLabel()

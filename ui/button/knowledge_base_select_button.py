@@ -23,9 +23,16 @@ class KnowledgeBaseSelectButton(QPushButton):
         QPushButton{
                     width: 114px;
                     height: 36px;
-                    background: #30425C;
+                    background: #2b2b2b;
+                    border: 1px solid #3c3c3c;
                     border-radius: 8px;
-                    opacity: 0.4;}
+                }
+        QPushButton:hover {
+                    background-color: #3c3c3c;
+                }
+        QPushButton:pressed {
+                    background-color: #1e1e1e;
+                }
                 """)
 
         # 图标
@@ -66,9 +73,12 @@ class KnowledgeBaseSelectButton(QPushButton):
         self.menu = QMenu(self)
         self.menu.setStyleSheet("""
             QMenu {
-                background: #30425C;
+                background: #2b2b2b;
+                border: 1px solid #3c3c3c;
                 border-radius: 8px;
-                opacity: 0.4;
+            }
+            QMenu::item:selected {
+                background-color: #3c3c3c;
             }
         """)
 
@@ -81,10 +91,10 @@ class KnowledgeBaseSelectButton(QPushButton):
         selected_label = QCheckBox()
         selected_label.setStyleSheet("""
                     QCheckBox {
-                        background-color: #30425C;
-                        border: 1px solid #808080;  /* 添加灰色边框 */
-                        border-radius: 3px;         /* 轻微圆角 */
-                        padding: 2px;               /* 增加内边距 */
+                        background-color: #2b2b2b;
+                        border: 1px solid #3c3c3c;
+                        border-radius: 3px;
+                        padding: 2px;
                     }
                     QCheckBox::indicator {
                         width: 12px;
@@ -97,7 +107,7 @@ class KnowledgeBaseSelectButton(QPushButton):
                         image: none;
                     }
                     QCheckBox:hover {
-                        border: 1px solid #A0A0A0;  /* 悬停时变浅灰 */
+                        border: 1px solid #858585;
                     }
                """)
         selected_label.setFixedSize(16, 16)

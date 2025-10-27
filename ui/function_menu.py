@@ -20,7 +20,8 @@ class FunctionMenu(QWidget):
             QWidget {
                 width: 432px;
                 height: 432px;
-                background: rgba(48,66,92,0.4);
+                background: #2b2b2b;
+                border: 1px solid #3c3c3c;
                 border-radius: 12px;
             }
         """)
@@ -103,16 +104,17 @@ class FunctionMenu(QWidget):
             QPushButton {
                 width: 72px;
                 height: 72px;
-                background: #30425C;
+                background: #2b2b2b;
+                border: 1px solid #3c3c3c;
                 border-radius: 10px;
             }
             QPushButton:hover {
-                background-color: rgb(40, 60, 90);
-                border-color: rgb(80, 100, 140);
+                background-color: #3c3c3c;
+                border-color: #3c3c3c;
             }
             QPushButton:pressed {
-                background-color: rgb(24, 36, 54);
-                border-color: rgb(48, 64, 96);
+                background-color: #1e1e1e;
+                border-color: #3c3c3c;
             }
         """)
         container_layout.addWidget(btn,0,Qt.AlignCenter)
