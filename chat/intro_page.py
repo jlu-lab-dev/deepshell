@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QSpacerItem, QSizePolicy, QHBoxLayout
 from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QMovie, QPixmap, QFont
 from config.config_manager import ConfigManager
@@ -6,7 +6,7 @@ from config.config_manager import ConfigManager
 class ChatIntroPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.init_ui()
+        self.init_ui2()
 
     def init_ui(self):
         self.setObjectName('guide_widget')
@@ -48,6 +48,49 @@ class ChatIntroPage(QWidget):
         layout.addStretch()
         self.setLayout(layout)
 
+    def init_ui2(self):
+        self.setObjectName('guide_widget')
+        self.setStyleSheet("""
+            background: transparent;
+            border-radius: 12px;
+        """)
+
+        # Logo
+        self.movie_label = QLabel()
+        self.movie_label.setPixmap(QPixmap("ui/icon/DeepShell/shell.png").scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.movie_label.setStyleSheet("""
+            background: transparent;
+            border-radius: 24px;
+        """)
+        self.movie_label.setFixedSize(QSize(64, 64))
+        self.movie_label.setAlignment(Qt.AlignCenter)
+
+        self.welcome_label = QLabel("今天有什么可以帮到你？")
+        self.welcome_label.setAlignment(Qt.AlignCenter)
+        font = QFont("Microsoft YaHei", 20)
+        font.setWeight(QFont.Bold)
+        self.welcome_label.setFont(font)
+        self.welcome_label.setStyleSheet("""
+                    QLabel{
+                        color: #FFFFFF;
+                        background: transparent;
+                        padding: 0px;
+                    }
+                    text-shadow: 1px 1px 4px rgba(0,0,0,180);
+                """)
+
+        horizontal_layout = QHBoxLayout()
+        horizontal_layout.setSpacing(0)
+        horizontal_layout.setContentsMargins(0, 0, 0, 0)
+        horizontal_layout.addWidget(self.movie_label, alignment=Qt.AlignCenter)
+        horizontal_layout.addWidget(self.welcome_label, alignment=Qt.AlignCenter)
+
+        # 导航页布局 - 只显示Logo
+        layout = QVBoxLayout()
+        layout.addStretch()
+        layout.addLayout(horizontal_layout)
+        layout.addStretch()
+        self.setLayout(layout)
 
 if __name__ == "__main__":
     from PyQt5.QtWidgets import QApplication

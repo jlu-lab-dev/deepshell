@@ -56,7 +56,7 @@ class ShadowWindow(QWidget):
             color: #FFFFFF;
         """)
         self.middle_label.setAlignment(Qt.AlignCenter)
-        self.middle_label.setText("智能问答")
+        self.middle_label.setText("智能助手")
         self.middle_label.hide()  # 初始状态隐藏，当后面点击窗口的时候进行显示
 
         # 语音按钮
@@ -230,11 +230,17 @@ class ShadowWindow(QWidget):
         self.aboutPage.show()
 
     def change_title_midlabel(self, text):
-        self.middle_label.setText(text.upper())
-        self.middle_label.show()
+        if text == "系统功能": # only for demo
+            text = "智能助手"
+
+        if text == "智能助手":
+            pass
+        else:
+            self.middle_label.setText(text.upper())
+            self.middle_label.show()
 
     def icon_clicked_event(self):
-        self.mainwin.handle_function_selection("智能问答")
+        self.mainwin.handle_function_selection("智能助手")
         self.middle_label.hide()
 
     def main_window_close(self):

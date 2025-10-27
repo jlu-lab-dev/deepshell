@@ -244,11 +244,16 @@ class MainWin(QWidget):
             "语音聊天": {
                 "main": self.speech_page
             },
-            "系统功能": {
-                "main": self.sys_func_intro,
+            # "系统功能": {
+            #     "main": self.sys_func_intro,
+            #     "chat": self.chat_box,
+            #     "bottom": self.input_field,
+            # },
+            "系统功能": {  # only for demo
+                "main": self.chat_intro,
                 "chat": self.chat_box,
-                "bottom": self.input_field,
-            }
+                "bottom": self.input_field
+            },
         }
 
         # mode setting
@@ -399,18 +404,18 @@ class MainWin(QWidget):
                 self.sendTask = PPTTask()
                 self.pgen = PPTGenerator()
                 self.pgen.pptgen_complete_signal.connect(self.handle_gen_ppt)
-            # case "AI 表格":
-            #     self.mode = AssistantMode.CHAT
-            #     self.sendTask = TableTask()
-            # case "AI 识图":
-            #     self.mode = AssistantMode.CHAT
-            #     self.sendTask = OcrTask()
+            case "AI 表格":
+                self.mode = AssistantMode.CHAT
+                self.sendTask = TableTask()
+            case "AI 识图":
+                self.mode = AssistantMode.CHAT
+                self.sendTask = OcrTask()
             case "会议记录":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = AudioTask()
-            # case "语种翻译":
-            #     self.mode = AssistantMode.CHAT
-            #     self.sendTask = TranslateTask()
+            case "语种翻译":
+                self.mode = AssistantMode.CHAT
+                self.sendTask = TranslateTask()
             case "思维导图":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = MapTask()
