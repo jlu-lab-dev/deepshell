@@ -2,44 +2,44 @@ from PyQt5.QtCore import pyqtSignal, Qt, QEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSpacerItem, QSizePolicy, QScrollBar, QScrollArea
 
 from ui.chat.bubble_message import BubbleMessage
+from ui.theme_manager import ThemeManager
 
 
 class ChatScrollBar(QScrollBar):
     def __init__(self):
         super().__init__()
-        self.setStyleSheet(
-            '''
-          QScrollBar:vertical {
-              border-width: 0px;
+        self.theme_manager = ThemeManager()
+        self.apply_theme()
+        self.theme_manager.theme_changed.connect(self.apply_theme)
+    
+    def apply_theme(self, theme_name=None):
+        colors = self.theme_manager.get_colors()
+        self.setStyleSheet(f'''
+          QScrollBar:vertical {{
               border: none;
-              width:0px;
-              min-width: 0px;  // 新增最小宽度限制
-              max-width: 0px;  // 新增最大宽度限
-              background: transparent;
-          }
-          QScrollBar::handle:vertical {
-              width: 0px;
-              background: transparent;
-              border: none;  // 新增边框清除
-
-          }
-          QScrollBar::add-line:vertical {
-          }
-          QScrollBar::sub-line:vertical {
+              width: 8px;
+              background: {colors['scrollbar_bg']};
+              margin: 0px;
+          }}
+          QScrollBar::handle:vertical {{
+              background: {colors['scrollbar_handle']};
+              min-height: 30px;
+              border-radius: 4px;
+          }}
+          QScrollBar::handle:vertical:hover {{
+              background: {colors['scrollbar_handle_hover']};
+          }}
+          QScrollBar::add-line:vertical,
+          QScrollBar::sub-line:vertical {{
               border: none;
               background: none;
-              width: 0px;
               height: 0px;
-          }
-          QScrollBar::sub-page:vertical {
-          }
-
-          QScrollBar::add-page:vertical {
-              width:0px;
+          }}
+          QScrollBar::add-page:vertical,
+          QScrollBar::sub-page:vertical {{
               background: none;
-          }
-            '''
-        )
+          }}
+        ''')
 
 
 class ChatScrollArea(QScrollArea):
@@ -59,7 +59,7 @@ class ChatScrollArea(QScrollArea):
 
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         # 使用自定义滚动条
         scrollBar = ChatScrollBar()
@@ -102,8 +102,12 @@ class ChatBox(QWidget):
         super().__init__()
         self.box_width = width
         self.box_height = height
+        self.theme_manager = ThemeManager()
         self.init_ui()
         self.spacerItemAdded = False
+        
+        # 连接主题切换信号
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
     def init_ui(self):
         self.resize(self.box_width, self.box_height)
@@ -152,35 +156,41 @@ class ChatBox(QWidget):
     def set_scroll_bar_value(self, val):
         self.scrollArea.verticalScrollBar().setValue(val)
 
+    def on_theme_changed(self, theme_name):
+        """主题切换回调"""
+        self.update_messages_theme()
+    
+    def update_messages_theme(self):
+        """更新所有消息的主题"""
+        colors = self.theme_manager.get_colors()
+        for i in range(self.msg_layout.count()):
+            wid0 = self.msg_layout.itemAt(i).widget()
+            if isinstance(wid0, BubbleMessage):
+                if i == 0 or i % 2 == 1:
+                    # AI消息
+                    wid0.message.setStyleSheet(f'''
+                        background-color: {colors['ai_message_bg']};
+                        border-radius:12px;
+                        padding:10px;
+                        color: {colors['message_text']};
+                    ''')
+                else:
+                    # 用户消息
+                    wid0.message.setStyleSheet(f'''
+                        background-color: {colors['user_message_bg']};
+                        border-radius:12px;
+                        padding:10px;
+                        color: {colors['message_text']};
+                    ''')
+    
     def switchViewType(self):
         self.setFixedHeight(self.box_height)
         self.scrollArea.setFixedHeight(self.box_height)
-        for i in range(self.msg_layout.count()):
-            wid0 = self.msg_layout.itemAt(i).widget()
-            if isinstance(wid0,BubbleMessage):
-                wid0.updatePlayIcon()
-                if i==0 or i%2==1:
-                    wid0.message.setStyleSheet(
-                        '''
-                        background-color: rgba(54,54,54,204);
-                        border-radius:10px;
-                        padding:10px;
-                        color: white;
-                        '''
-                    )
-                else:
-                    wid0.message.setStyleSheet(
-                        '''
-                        background-color: rgba(0,93,255,204);
-                        border-radius:10px;
-                        padding:10px;
-                        color: white;
-                        '''
-                    )
-        self.setMaximumWidth(432)
-        self.setFixedWidth(432)
-        self.scrollAreaContents.setFixedWidth(432)
-        self.scrollArea.setFixedWidth(432)
+        self.update_messages_theme()
+        self.setMaximumWidth(410)
+        self.setFixedWidth(410)
+        self.scrollAreaContents.setFixedWidth(410)
+        self.scrollArea.setFixedWidth(410)
         self.update()
 
     def update(self) -> None:

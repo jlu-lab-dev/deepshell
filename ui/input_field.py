@@ -16,6 +16,7 @@ from ocr.ocr_text import TextProcessor
 from ui.button.websearch_button import WebSearchButton
 from ui.file_thumbnail import HorizontalThumbnailScrollArea
 from utils.document_loader import DocumentProcessor
+from ui.theme_manager import ThemeManager
 
 
 class InputField(QFrame):
@@ -25,6 +26,7 @@ class InputField(QFrame):
 
     def __init__(self):
         super().__init__()
+        self.theme_manager = ThemeManager()
         self.init_ui()
         self.is_zoomed = False
         self.capture_voice_flag = False
@@ -35,57 +37,18 @@ class InputField(QFrame):
         self.pre_prompt_task = PrePromptTask()
         self.pre_prompt_task.complete_signal.connect(self.ai_callback)
         self.pre_prompt_task.update_signal.connect(self.update_pre_prompt)
+        
+        # 连接主题切换信号
+        self.theme_manager.theme_changed.connect(self.apply_theme)
 
     def init_ui(self):
         # 设置样式
-        self.resize(432, 126)
+        self.resize(410, 126)
         self.setAcceptDrops(True)  # 启用拖拽支持
-        self.setStyleSheet("""
-               QWidget {
-                   background: #30425C;  /* 背景色 */
-                   border-radius: 8px;   /* 圆角 */
-                   opacity: 0.4;         /* 透明度 */
-
-               }
-           """)
 
         # 输入框
         self.input_text_edit = QTextEdit()
         self.input_text_edit.setPlaceholderText("有什么问题尽管问我")
-        self.input_text_edit.setStyleSheet("""
-            QTextEdit {
-                font-family: Source Han Sans SC;
-                font-weight: 400;
-                font-size: 14px;
-                color: #B3B3B3;
-                line-height: 18px;
-                background: #30425C;
-            }
-
-            /* 垂直滚动条 */
-            QTextEdit QScrollBar:vertical {
-                width: 6px;
-                background: rgba(240, 240, 240, 0.3);
-                margin: 0px;
-            }
-
-            QTextEdit QScrollBar::handle:vertical {
-                background: #C0C0C0;
-                min-height: 30px;
-                border-radius: 3px;
-            }
-
-            QTextEdit QScrollBar::add-line:vertical, 
-            QScrollBar::sub-line:vertical {
-                height: 0px;
-                background: none;
-            }
-
-            /* 水平滚动条 */
-            QTextEdit QScrollBar:horizontal {
-                height: 0px;
-            }
-        """)
         self.input_text_edit.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.input_text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.input_text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -96,9 +59,6 @@ class InputField(QFrame):
         self.unfold_icon_path = "ui/icon/icon_输入框_展开.png"
         self.fold_icon_path = "ui/icon/icon_输入框_收起.png"
         self.zoom_button = QPushButton()
-        self.zoom_button.setStyleSheet("""
-                            background: rgba(241, 145, 73, 0);
-                        """)
         self.zoom_button.setIcon(QIcon(self.unfold_icon_path))
         self.zoom_button.setIconSize(QSize(16, 16))
         self.zoom_button.setFixedSize(16, 16)
@@ -133,9 +93,6 @@ class InputField(QFrame):
         # 文件上传按钮
         self.upload_file_button = QPushButton()
         upload_file_icon_path = "ui/icon/icon_输入框_附件.png"
-        self.upload_file_button.setStyleSheet("""
-                                    background: rgba(241, 145, 73, 0);
-                                """)
         self.upload_file_button.setIcon(QIcon(upload_file_icon_path))
         self.upload_file_button.setIconSize(QSize(22, 24))
         self.upload_file_button.setFixedSize(24, 24)
@@ -180,15 +137,92 @@ class InputField(QFrame):
 
         self.upload_file_list = []  # 上传文件list
         self.doc_list = []   # 附件解析内容list
+        
+        # 在所有组件创建完成后应用主题
+        self.apply_theme(self.theme_manager.get_current_theme())
 
+    def apply_theme(self, theme_name):
+        """应用主题样式"""
+        colors = self.theme_manager.get_colors()
+        
+        # 设置输入框容器样式
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {colors['input_bg']};
+                border: 1px solid {colors['input_border']};
+                border-radius: 12px;
+            }}
+        """)
+        
+        # 设置文本编辑框样式
+        self.input_text_edit.setStyleSheet(f"""
+            QTextEdit {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei";
+                font-weight: 400;
+                font-size: 14px;
+                color: {colors['input_text']};
+                line-height: 20px;
+                background: transparent;
+                border: none;
+                padding: 4px;
+            }}
+
+            QTextEdit QScrollBar:vertical {{
+                width: 8px;
+                background: {colors['scrollbar_bg']};
+                margin: 0px;
+            }}
+
+            QTextEdit QScrollBar::handle:vertical {{
+                background: {colors['scrollbar_handle']};
+                min-height: 30px;
+                border-radius: 4px;
+            }}
+            
+            QTextEdit QScrollBar::handle:vertical:hover {{
+                background: {colors['scrollbar_handle_hover']};
+            }}
+
+            QTextEdit QScrollBar::add-line:vertical, 
+            QTextEdit QScrollBar::sub-line:vertical {{
+                height: 0px;
+                background: none;
+            }}
+
+            QTextEdit QScrollBar:horizontal {{
+                height: 0px;
+            }}
+        """)
+        
+        # 更新按钮样式 - Cursor风格
+        button_style = f"""
+            QPushButton {{
+                background: {colors['button_bg']};
+                border: 1px solid {colors['button_border']};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QPushButton:hover {{
+                background: {colors['button_hover']};
+                border: 1px solid {colors['button_border']};
+            }}
+            QPushButton:pressed {{
+                background: {colors.get('button_pressed', colors['button_bg'])};
+            }}
+        """
+        self.zoom_button.setStyleSheet(button_style)
+        self.microphone_button.setStyleSheet(button_style)
+        self.upload_file_button.setStyleSheet(button_style)
+        self.send_button.setStyleSheet(button_style)
+    
     def toggle_zoom(self):
         if not self.is_zoomed:
-            self.resize(432, 502)
+            self.resize(410, 502)
             self.input_text_edit.setFixedHeight(436)
             self.zoom_button.setIcon(QIcon(self.fold_icon_path))
             self.is_zoomed = True
         else:
-            self.resize(432, 126)
+            self.resize(410, 126)
             self.input_text_edit.setFixedHeight(78)
             self.zoom_button.setIcon(QIcon(self.unfold_icon_path))
             self.is_zoomed = False

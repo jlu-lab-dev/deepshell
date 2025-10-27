@@ -1,6 +1,6 @@
 from PyQt5 import QtGui
-from PyQt5.QtCore import QPoint, Qt, QSize
-from PyQt5.QtGui import QIcon, QPixmap, QPainter
+from PyQt5.QtCore import QPoint, Qt, QSize, QRectF
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QPainterPath
 from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QPushButton, QAction, QSizePolicy, QVBoxLayout, QSpacerItem, \
     QDesktopWidget
 
@@ -10,17 +10,23 @@ from ui.page.about_page import AboutPage
 from ui.page.apikey_config_page import ApiKeyConfigPage
 from main_window import MainWinTitle, SettingMenu
 from main_window import MainWin
+from ui.theme_manager import ThemeManager
 
 
 class ShadowWindow(QWidget):
     def __init__(self):
         super().__init__()
         available_geometry = QApplication.desktop().availableGeometry()
-        self.shadow_win_width = 480
-        self.shadow_win_height = available_geometry.height()
+        # 窗口尺寸 - 稍微窄一点，高度为屏幕的90%
+        self.shadow_win_width = 450
+        self.shadow_win_height = int(available_geometry.height() * 0.9)
+        self.theme_manager = ThemeManager()
         self.init_ui()
         self._is_drag = False  # 拖动
         self.move_DragPosition = QPoint()
+        
+        # 连接主题切换信号
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
     def init_ui(self):
         self.setWindowTitle(ConfigManager().app_config['name'])
@@ -86,6 +92,15 @@ class ShadowWindow(QWidget):
         menu.sub_menu = sub_menu
         menu.setSubMenu()
 
+        # 添加主题切换选项
+        theme_menu = menu.addMenu("主题")
+        self.action_dark = QAction("深色主题")
+        self.action_dark.triggered.connect(lambda: self.theme_manager.set_theme('dark'))
+        self.action_light = QAction("浅色主题")
+        self.action_light.triggered.connect(lambda: self.theme_manager.set_theme('light'))
+        theme_menu.addAction(self.action_dark)
+        theme_menu.addAction(self.action_light)
+        
         menu.addAction("配置", self.show_config_page)
         menu.addSeparator()
         menu.addAction("关于", self.show_about_page)
@@ -225,12 +240,25 @@ class ShadowWindow(QWidget):
         self.window_visible = False
         self.hide()
 
+    def on_theme_changed(self, theme_name):
+        """主题切换时的回调"""
+        self.update()  # 重绘窗口
+    
     # 重写原有方法 Start
     def paintEvent(self, event):
         # 创建一个QPainter对象，并为当前窗口提供绘图功能
         painter = QPainter(self)
-        pixmap = QPixmap('ui/icon/侧边栏背景.png').scaled(self.size())
-        painter.drawPixmap(0, 0, pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)  # 抗锯齿
+        
+        # 根据主题获取背景颜色
+        colors = self.theme_manager.get_colors()
+        bg_color = colors['window_bg']
+        
+        # 使用纯色带圆角
+        path = QPainterPath()
+        rect = QRectF(self.rect())
+        path.addRoundedRect(rect, 16, 16)  # 16px圆角 - 更加圆润
+        painter.fillPath(path, QColor(bg_color))
 
     def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
         if a0.key() == Qt.Key_Escape:
