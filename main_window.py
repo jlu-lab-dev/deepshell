@@ -5,7 +5,7 @@ import datetime
 import PyQt5.sip as sip
 
 from enum import Enum
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy, QMenu, QLabel
 
@@ -28,8 +28,7 @@ from ppt.intro_ui import PPTIntroPage
 from ppt.workflow.ppt_task import PPTTask
 from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 from sys_agent.intro_ui import SysFuncIntro
-from sys_agent.sys_func_call import FUNCTION_MAP
-from sys_agent.sys_agent_task import SysAgentExplanationTask, SysAgentFunctionCallTask
+from sys_agent.agent_controller import AgentController
 from translation.intro_ui import TranslateIntroPage
 from translation.translate_task import TranslateTask
 from translation.translate_detect import TranslateDetect
@@ -303,6 +302,19 @@ class MainWin(QWidget):
         self.timerSend = QTimer(self)
         self.timerSend.timeout.connect(self.listeningToWaiting)  # "聆听中"到"等待中"的自动转换
 
+        self.agent_thread = QThread()
+        self.agent_controller = AgentController()
+
+        # 将controller移动到新线程，以防阻塞UI
+        self.agent_controller.moveToThread(self.agent_thread)
+
+        # 连接AgentController的信号到MainWin中的槽
+        self.agent_controller.update_signal.connect(self.handle_agent_update)
+        self.agent_controller.finished_signal.connect(self.handle_agent_finished)
+        self.agent_controller.error_signal.connect(self.handle_agent_error)
+
+        self.agent_thread.start()
+
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
         config = self.page_mapping.get(function_name)
@@ -384,9 +396,6 @@ class MainWin(QWidget):
                 self.sendTask = PPTTask()
                 self.pgen = PPTGenerator()
                 self.pgen.pptgen_complete_signal.connect(self.handle_gen_ppt)
-            case "系统功能":
-                self.mode = AssistantMode.CHAT
-                self.sendTask = SysAgentExplanationTask()
             # case "AI 表格":
             #     self.mode = AssistantMode.CHAT
             #     self.sendTask = TableTask()
@@ -408,6 +417,9 @@ class MainWin(QWidget):
             # case "文档分析":
             #     self.mode = AssistantMode.CHAT
             #     self.sendTask = DocumentTask()
+            case _:  # 【增加一个默认case】
+                if not hasattr(self, 'sendTask') or not isinstance(self.sendTask, ChatTask):
+                    self.sendTask = ChatTask()
         self.sendTask.assistant.set_selected_kb(self.selected_kb_id_list)
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
@@ -512,18 +524,41 @@ class MainWin(QWidget):
                 self.chat_box.add_message_item(bubble_message)
                 bubble_message.button.clicked.connect(lambda: self.pgen.markdown_to_json(result))
 
-        if self.current_func == "系统功能":
-            # 如果还没有加载动画气泡，则添加
-            result_bubble = BubbleMessage(f'正在拆解为子任务链...', '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
-            self.chat_box.add_message_item(result_bubble)
-            self.tool_result = []
-            self.chain_step = 1
-            self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
-
         # 重置当前BubbleMessage引用
         self.current_bubble_message = None
         # 启用发送按钮
         self.input_field.set_send_button_status(True)
+
+    def handle_agent_update(self, message):
+        """接收Agent的增量更新，并更新到UI气泡上"""
+        self.show_waiting_message(False)
+        if self.current_bubble_message:
+            current_text = self.current_bubble_message.message.text()
+            self.current_bubble_message.message.update_text(current_text + message)
+
+    def handle_agent_finished(self, final_message):
+        """接收Agent成功结束的信号"""
+        self.show_waiting_message(False)
+        if self.current_bubble_message:
+            current_text = self.current_bubble_message.message.text()
+            self.current_bubble_message.message.update_text(current_text + final_message)
+            self.current_bubble_message.update_button_status(True)
+
+        # 恢复UI
+        self.input_field.set_send_button_status(True)
+        self.current_bubble_message = None  # 清理当前气泡引用
+
+    def handle_agent_error(self, error_message):
+        """接收Agent发生错误的信号"""
+        self.show_waiting_message(False)
+        if self.current_bubble_message:
+            current_text = self.current_bubble_message.message.text()
+            self.current_bubble_message.message.update_text(current_text + error_message)
+            # 可以考虑给错误的气泡加上一个特殊的标记或样式
+
+        # 恢复UI
+        self.input_field.set_send_button_status(True)
+        self.current_bubble_message = None  # 清理当前气泡引用
 
     def send_quest_to_ai(self, message):
         self.current_input = message
@@ -548,6 +583,23 @@ class MainWin(QWidget):
         # 判断当前页面如果是gui就跳转聊天
         self.add_bubble_message(user_input, True, thumbnail_list=thumbnail_list)
 
+        if self.current_func == "系统功能":
+            # 如果是系统功能，直接启动Agent Controller，并立即返回
+            if self.contentStackWgt.currentWidget() != self.chat_box:
+                self.contentStackWgt.setCurrentWidget(self.chat_box)
+
+            # 1. 创建一个空的气泡，作为Agent后续更新内容的“画布”
+            self.current_bubble_message = BubbleMessage('', '', msg_type=MessageType.TEXT, font_size=12,
+                                                        user_send=False)
+            self.chat_box.add_message_item(self.current_bubble_message)
+
+            # 2. 跨线程调用Agent Controller的入口函数开始工作
+            self.current_input = full_message  # 确保current_input被设置
+            QMetaObject.invokeMethod(self.agent_controller, "start_workflow", Qt.QueuedConnection,
+                                     Q_ARG(str, full_message))
+            return  # 提前返回，不执行下面的send_quest_to_ai
+
+        # 对于其他所有功能，保持原有逻辑
         if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:  # AI模型检索
             if self.contentStackWgt.currentWidget() != self.chat_box:
                 self.contentStackWgt.setCurrentWidget(self.chat_box)
@@ -574,7 +626,7 @@ class MainWin(QWidget):
 
     def add_bubble_message(self, message, user_send, thumbnail_list=None):
         self.chat_box.scrollArea.reset_auto_scroll()
-        if len(thumbnail_list) > 0:
+        if thumbnail_list is not None and len(thumbnail_list) > 0:
             for thumbnail in thumbnail_list:
                 thumbnail_message = ThumbnailMessage(user_send=user_send,thumbnail = thumbnail)
                 self.chat_box.add_message_item(thumbnail_message)
@@ -621,79 +673,6 @@ class MainWin(QWidget):
         return
 
     # Send End
-
-    # system agent function calling chain START
-    def start_function_call_chain(self, user_input, tool_result, result_bubble):
-        content = user_input + "\n工具调用结果：" + "\n".join(
-            f"{json.dumps(item, ensure_ascii=False)}" for item in tool_result
-        ) if len(tool_result) > 0 else user_input
-        logging.info(content)
-        self.function_call_task = SysAgentFunctionCallTask()
-        self.function_call_task.update_signal.connect(self.update_function_calling_chain)
-        self.function_call_task.complete_signal.connect(lambda message: self.function_calling_chain_callback(message, result_bubble))
-        self.function_call_task.set_topic(content)
-        self.function_call_task.start()
-
-    def update_function_calling_chain(self, message):
-        """function_call_task输出调用工具链的进度"""
-        self.input_field.set_send_button_status(False)
-
-    def function_calling_chain_callback(self, message, result_bubble):
-        """调用工具链生成完毕"""        
-        actions = json.loads(message.strip())
-        if isinstance(actions, dict):  # 单步
-            actions = [actions]
-        logging.info(actions)
-        try:
-            need_more_tool = False
-            for action in actions:
-                tool_name = action.get("tool")
-                args = action.get("args", {})
-                need_more_tool |= action.get("need_more_tool", False)
-
-                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + f"正在执行第{self.chain_step}个子任务...")
-                if tool_name and tool_name in FUNCTION_MAP:
-                    func = FUNCTION_MAP[tool_name]
-                    result = func(**args)
-                    # 将tool_name字段放到字典最前面
-                    from collections import OrderedDict
-                    result = OrderedDict([('tool_name', tool_name), *result.items()])
-                    self.tool_result.append(result)
-                    logging.info(result)
-                    if result["success"]:
-                        msg = f'子任务{self.chain_step} 执行【成功】：\n{result["message"]}'
-                    else:
-                        msg = f'执行【失败】：\n{result["message"]}'
-                    if result.get("data") is not None:
-                        data = result["data"]
-                        if isinstance(data, list):
-                            msg += "<br>" + "<br>".join(str(item) for item in data)
-                        elif isinstance(data, dict):
-                            msg += "<br>" + "<br>".join(f"{k}: {v}" for k, v in data.items())
-                        else:
-                            msg += "<br>" + str(data)
-                else:
-                    msg = "执行【失败】：\n无法识别的操作或无效的工具名。"
-                
-                result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
-                self.chain_step += 1
-
-            if need_more_tool:
-                self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
-            else:
-                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + "操作已全部完成")
-        
-        except Exception as e:
-            msg = f"执行【失败】：\n{str(e)}"
-            result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
-        finally:
-            result_bubble.speech_signal.connect(self.handle_speech)
-            result_bubble.update_button_status(True)
-            
-            self.chat_box.scrollArea.reset_auto_scroll()
-            self.input_field.set_send_button_status(True)
-    
-    # system agent function calling chain END
 
     def set_chat_mode(self):
         print("Chat mode now.")
