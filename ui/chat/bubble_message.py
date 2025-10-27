@@ -38,7 +38,9 @@ class TextMessage(QLabel):
         self.setMaximumWidth(450)
         self.setWordWrap(True)
         self.setTextFormat(Qt.RichText)
-        self.setFont(QFont('Microsoft YaHei', 12))
+        font = QFont('Microsoft YaHei', 12)
+        font.setWeight(QFont.DemiBold)  # 半粗体，介于 normal 与 bold 之间
+        self.setFont(font)
         self.setContextMenuPolicy(Qt.NoContextMenu)
         self.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -135,7 +137,9 @@ class TableMessage(QLabel):
     def init_ui(self):
         self.setWordWrap(True)
         self.setTextFormat(Qt.RichText)
-        self.setFont(QFont('Microsoft YaHei', 12))
+        font = QFont('Microsoft YaHei', 12)
+        font.setWeight(QFont.DemiBold)  # 半粗体，介于 normal 与 bold 之间
+        self.setFont(font)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)  # 修改为Preferred
 
         # 解析内容并设置初始文本
