@@ -14,17 +14,17 @@ class FunctionMenuButton(QPushButton):
             QPushButton {
                 width: 36px;
                 height: 36px;
-                background: #30425C;
+                background: #2b2b2b;
+                border: 1px solid #3c3c3c;
                 border-radius: 8px;
-                opacity: 0.4;
             }
             QPushButton:hover {
-                background-color: rgb(40, 60, 90);
-                border-color: rgb(80, 100, 140);
+                background-color: #3c3c3c;
+                border-color: #3c3c3c;
             }
             QPushButton:pressed {
-                background-color: rgb(24, 36, 54);
-                border-color: rgb(48, 64, 96);
+                background-color: #1e1e1e;
+                border-color: #3c3c3c;
             }
         """)
         self.setIcon(QIcon("ui/icon/icon_输入框_切换.png"))

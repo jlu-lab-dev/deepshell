@@ -30,9 +30,16 @@ class ModelSelectButton(QPushButton):
 			QPushButton{
                     width: 162px;
                     height: 36px;
-                    background: #30425C;
+                    background: #2b2b2b;
+                    border: 1px solid #3c3c3c;
                     border-radius: 8px;
-                    opacity: 0.4;}
+                }
+            QPushButton:hover {
+                background-color: #3c3c3c;
+            }
+            QPushButton:pressed {
+                background-color: #1e1e1e;
+            }
                 """)
 
         # 模型图标
@@ -74,13 +81,16 @@ class ModelSelectButton(QPushButton):
         self.menu.setStyleSheet("""
             QMenu {
                 width: 162px;
-                background: #30425C;
+                background: #2b2b2b;
+                border: 1px solid #3c3c3c;
                 border-radius: 8px;
-                opacity: 0.4;
             }
             QMenu::item {
                 min-height: 36px;
-            }          
+            }
+            QMenu::item:selected {
+                background-color: #3c3c3c;
+            }
         """)
 
         self.clicked.connect(self.show_menu)

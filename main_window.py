@@ -111,7 +111,7 @@ class MainWin(QWidget):
 
         self.audio_transcription_intro = AudioTranscriptionIntroPage()  # 思维导图
 
-        self.chat_box = ChatBox(432, self.main_win_height - 250)  # 聊天框
+        self.chat_box = ChatBox(410, self.main_win_height - 250)  # 聊天框
         self.chat_box.delete_index_history.connect(self.delete_index_history)
         self.chat_box.add_vertical_spacer()
         self.chat_box.hide()
