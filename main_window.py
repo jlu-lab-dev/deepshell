@@ -91,7 +91,7 @@ class MainWin(QWidget):
         # 中间内容栈 Start
         self.contentStackWgt = QStackedWidget()
 
-        self.chat_intro = ChatIntroPage()  # 智能问答，即主界面
+        self.chat_intro = ChatIntroPage()  # 智能助手，即主界面
 
         self.ppt_intro = PPTIntroPage()    # AI PPT
 
@@ -193,7 +193,7 @@ class MainWin(QWidget):
 
         # 功能组件映射
         self.page_mapping = {
-            "智能问答": {
+            "智能助手": {
                 "main": self.chat_intro,
                 "chat": self.chat_box,
                 "bottom": self.input_field
@@ -203,16 +203,16 @@ class MainWin(QWidget):
                 "chat": self.chat_box,
                 "bottom": self.input_field,
             },
-            # "语种翻译": {
-            #     "main": self.translate_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field,
-            # },
-            # "AI 识图": {
-            #     "main": self.ocr_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field
-            # },
+            "语种翻译": {
+                "main": self.translate_intro,
+                "chat": self.chat_box,
+                "bottom": self.input_field,
+            },
+            "AI 识图": {
+                "main": self.ocr_intro,
+                "chat": self.chat_box,
+                "bottom": self.input_field
+            },
             # "文档分析": {
             #     "main": self.doc_analysis_intro,
             #     "chat": self.chat_box,
@@ -221,11 +221,11 @@ class MainWin(QWidget):
             "知识库": {
                 "main": self.knowledge_base_home
             },
-            # "AI 表格": {
-            #     "main": self.table_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field,
-            # },
+            "AI 表格": {
+                "main": self.table_intro,
+                "chat": self.chat_box,
+                "bottom": self.input_field,
+            },
             "会议记录": {
                 "main": self.meeting_intro,
                 "chat": self.chat_box,
@@ -256,7 +256,7 @@ class MainWin(QWidget):
         self.current_model = "DeepSeek-V3"
         self.current_input = None    # string
         self.current_bubble_message = None
-        self.current_func = "智能问答"
+        self.current_func = "智能助手"
 
         # knowledge base setting
         self.selected_kb_id_list = []
@@ -317,6 +317,9 @@ class MainWin(QWidget):
 
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
+        if function_name == "智能助手":  # only for demo
+            function_name = "系统功能"
+
         config = self.page_mapping.get(function_name)
         if function_name != "知识库":
             self.parent().change_title_midlabel(function_name)
@@ -388,7 +391,7 @@ class MainWin(QWidget):
             self.input_field.set_send_button_status(True)
 
         match function_name:
-            case "智能问答":
+            case "智能助手":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = ChatTask()
             case "AI PPT":
@@ -566,7 +569,7 @@ class MainWin(QWidget):
         if self.serverCheck.internet_status():
             # Speech.short_text_play("好的，请稍等")
             if self.current_func == "语种翻译":
-                if self.input_field.language_layout.itemAt(0).widget().current_language == "自动检测":
+                if self.input_field.language_layout.itemAt(0).widget().current_language == "自动":
                     detected_lang = TranslateDetect.detect_language(message)
                     self.input_field.language_layout.itemAt(0).widget().set_current_language(detected_lang)
                 message = message+"[END]把用户输入翻译成"+self.input_field.language_layout.itemAt(2).widget().current_language
@@ -688,7 +691,7 @@ class MainWin(QWidget):
 
     def shift2home_page(self):
         self.set_chat_mode()
-        self.handle_function_selection("智能问答")
+        self.handle_function_selection("智能助手")
 
     # Speech Start
     def listeningToWaiting(self):  # 聆听中到等待中的自动转换函数

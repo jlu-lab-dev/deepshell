@@ -27,6 +27,7 @@ class ShadowWindow(QWidget):
         
         # 连接主题切换信号
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
+        self.mainwin.handle_function_selection("智能助手")
 
     def init_ui(self):
         self.setWindowTitle(ConfigManager().app_config['name'])

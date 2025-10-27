@@ -35,10 +35,13 @@ class FunctionMenu(QWidget):
 
         # 定义按钮数据（文本，图标路径）
         buttons = [
-            ("智能问答", "ui/icon/DeepShell/icon_DeepShell_智能问答.png"),
+            ("智能助手", "ui/icon/DeepShell/icon_DeepShell_智能助手.png"),
+            ("语种翻译", "ui/icon/DeepShell/icon_DeepShell_语种翻译.png"),
+            ("AI 识图", "ui/icon/DeepShell/icon_DeepShell_AI识图.png"),
             ("知识库", "ui/icon/DeepShell/icon_DeepShell_知识库.png"),
-            ("系统功能", "ui/icon/DeepShell/icon_DeepShell_系统功能.png"),
-            ("AI PPT", "ui/icon/DeepShell/icon_DeepShell_AI_PPT"),
+            # ("系统功能", "ui/icon/DeepShell/icon_DeepShell_系统功能.png"),
+            ("AI PPT", "ui/icon/DeepShell/icon_DeepShell_AI_PPT.png"),
+            ("AI 表格", "ui/icon/DeepShell/icon_DeepShell_AI表格.png"),
             ("会议记录", "ui/icon/DeepShell/icon_DeepShell_会议记录.png"),
             ("思维导图", "ui/icon/DeepShell/icon_DeepShell_思维导图.png"),
 
