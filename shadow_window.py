@@ -19,7 +19,7 @@ class ShadowWindow(QWidget):
         available_geometry = QApplication.desktop().availableGeometry()
         # 窗口尺寸 - 稍微窄一点，高度为屏幕的90%
         self.shadow_win_width = 450
-        self.shadow_win_height = int(available_geometry.height() * 0.7)
+        self.shadow_win_height = int(available_geometry.height() * 0.75)
         self.theme_manager = ThemeManager()
         self.init_ui()
         self._is_drag = False  # 拖动
