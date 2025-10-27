@@ -144,7 +144,7 @@ class KnowledgeBaseHome(QWidget):
             QLabel {
                 width: 168px;
                 height: 34px;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 14px;
                 color: #333333;
@@ -168,7 +168,7 @@ class KnowledgeBaseHome(QWidget):
         doc_label.setStyleSheet("""
             width: 28px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;
@@ -179,7 +179,7 @@ class KnowledgeBaseHome(QWidget):
             QLabel {
                 width: 50px;
                 height: 11px;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 14px;
                 color: #999999;
@@ -208,7 +208,7 @@ class KnowledgeBaseHome(QWidget):
             QLabel {
                 width: 130px;
                 height: 14px;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 14px;
                 color: #999999;
@@ -254,7 +254,7 @@ class KnowledgeBaseHome(QWidget):
 
         self.setWindowTitle(f"{ConfigManager().app_config['name']} - 知识库")
         # self.setWindowIcon(QIcon("ui/icon/知识库/icon_知识库_logo.png"))
-        self.setWindowIcon(QIcon("ui/icon/DeepShell/icon_app_logo_DeepShell_圆角.png"))
+        self.setWindowIcon(QIcon("ui/icon/DeepShell/shell.png"))
 
         # 整体布局
         mainLayout = QVBoxLayout(self)
@@ -413,7 +413,7 @@ class KnowledgeBaseHome(QWidget):
         self.infoLabel.setStyleSheet("""
                 QLabel#info_label {
                     height: 15px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #333333;

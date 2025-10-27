@@ -75,7 +75,7 @@ class FileThumbnail(QLabel):
         file_name_label = QLabel(file_name)
         file_name_label.setFixedSize(67, 13)
         file_name_label.setStyleSheet("""
-                                font-family: Source Han Sans SC;
+                                font-family: Microsoft YaHei;
                                 font-weight: 400;
                                 font-size: 14px;
                                 color: #FFFFFF;
@@ -85,7 +85,7 @@ class FileThumbnail(QLabel):
         file_size_label = QLabel(size_text)
         file_size_label.setFixedSize(71, 14)
         file_size_label.setStyleSheet("""
-                                font-family: Source Han Sans SC;
+                                font-family: Microsoft YaHei;
                                 font-weight: 400;
                                 font-size: 14px;
                                 color: #B3B3B3;

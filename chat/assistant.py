@@ -6,7 +6,7 @@ from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
 from rag.rag_manager import RAGManager
 from mcp.websearch.web_search_manager import WebSearchManager
-from sys_agent.sys_func_call import get_function_schemas
+from sys_agent.toolkit_sys import get_function_schemas
 
 class Assistant:
     def __init__(self, assistant_type: str, session_id: Optional[str] = None):

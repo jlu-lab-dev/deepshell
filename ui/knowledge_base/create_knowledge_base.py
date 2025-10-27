@@ -122,7 +122,7 @@ class CreateKnowledgeBaseWidget(QWidget):
                 background: #007AFF;
                 border: 1px solid #CCCCCC;
                 border-radius: 8px;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 16px;
                 color: #FFFFFF;
@@ -143,7 +143,7 @@ class CreateKnowledgeBaseWidget(QWidget):
                 background: #FAFAFA;
                 border-radius: 8px;
                 border: 1px solid #CCCCCC;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 16px;
                 color: #333333;

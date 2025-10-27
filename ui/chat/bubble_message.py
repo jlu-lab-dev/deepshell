@@ -10,6 +10,7 @@ from PyQt5.QtCore import pyqtSignal, Qt, QThread, QSize, QTimer
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QIcon, QMovie
 from bs4 import BeautifulSoup
 
+from config.config_manager import ConfigManager
 from ui.file_thumbnail import FileThumbnail
 from ui.theme_manager import ThemeManager
 
@@ -37,7 +38,9 @@ class TextMessage(QLabel):
         self.setMaximumWidth(450)
         self.setWordWrap(True)
         self.setTextFormat(Qt.RichText)
-        self.setFont(QFont('微软雅黑', 12))
+        font = QFont('Microsoft YaHei', 12)
+        font.setWeight(QFont.DemiBold)  # 半粗体，介于 normal 与 bold 之间
+        self.setFont(font)
         self.setContextMenuPolicy(Qt.NoContextMenu)
         self.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -134,7 +137,9 @@ class TableMessage(QLabel):
     def init_ui(self):
         self.setWordWrap(True)
         self.setTextFormat(Qt.RichText)
-        self.setFont(QFont('微软雅黑', 12))
+        font = QFont('Microsoft YaHei', 12)
+        font.setWeight(QFont.DemiBold)  # 半粗体，介于 normal 与 bold 之间
+        self.setFont(font)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)  # 修改为Preferred
 
         # 解析内容并设置初始文本
@@ -278,7 +283,7 @@ class GifLoadingMessage(QWidget):
         # 文字
         self.text_label = QLabel(text, self)
         self.text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.text_label.setFont(QFont('微软雅黑', 12))
+        self.text_label.setFont(QFont('Microsoft YaHei', 12))
         self.text_label.setStyleSheet(
                 '''
                 background-color: transparent;
@@ -320,14 +325,9 @@ class BubbleMessage(QWidget):
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
     def init_ui(self):
-        self.setStyleSheet(
-            '''
-                background: transparent;
-                border-radius: 8px;
-            '''
-        )
+        self.setStyleSheet('''background: transparent; border-radius: 8px;''')
 
-        # 按钮样式 - Cursor风格
+        # ---------------- 按钮初始化（保持你原来的） ----------------
         self.button_style_template = """
             QPushButton {{
                 background-color: {bg};
@@ -335,98 +335,97 @@ class BubbleMessage(QWidget):
                 border-radius: 6px;
                 padding: 2px;
             }}
-            QPushButton:hover {{
-                background-color: {hover};
-            }}
-            QPushButton:pressed {{
-                background-color: {pressed};
-            }}
+            QPushButton:hover {{ background-color: {hover}; }}
+            QPushButton:pressed {{ background-color: {pressed}; }}
         """
-        
-        # 播放按钮
-        self.play_button = QPushButton(self)
-        self.play_button.setFixedSize(QSize(20, 20))
-        self.play_button.setIcon(QIcon('ui/icon/icon_播放_侧边栏模式@2x.png'))
-        self.play_button.setIconSize(QSize(14, 14))
-        self.play_button.clicked.connect(self.playAudio)
-        self.play_button.setFlat(True)
-        self.play_button.setEnabled(False)
-        self.play_button.hide()
 
-        # 拷贝按钮
-        self.copy_button = QPushButton(self)
-        self.copy_button.setFixedSize(QSize(20, 20))
-        self.copy_button.setIcon(QIcon('ui/icon/icon_对话_拷贝.png'))
-        self.copy_button.setIconSize(QSize(14, 14))
-        self.copy_button.clicked.connect(self.copy_text)
-        self.copy_button.setFlat(True)
-        self.copy_button.setEnabled(False)
-        self.copy_button.hide()
+        # 播放 / 拷贝 / markdown / 删除 四个按钮
+        for btn_name, icon_path, slot in (
+                ('play_button', 'ui/icon/icon_播放_侧边栏模式@2x.png', self.playAudio),
+                ('copy_button', 'ui/icon/icon_对话_拷贝.png', self.copy_text),
+                ('markdown_button', 'ui/icon/icon_对话_markdown.png', self.copy_markdown),
+                ('delete_button', 'ui/icon/icon_对话_删除.png', self.delete_message),
+        ):
+            btn = QPushButton(self)
+            btn.setFixedSize(20, 20)
+            btn.setIcon(QIcon(icon_path))
+            btn.setIconSize(QSize(14, 14))
+            btn.setFlat(True)
+            btn.setEnabled(False)
+            btn.hide()
+            btn.clicked.connect(slot)
+            setattr(self, btn_name, btn)
 
-        # markdown按钮
-        self.markdown_button = QPushButton(self)
-        self.markdown_button.setFixedSize(QSize(20, 20))
-        self.markdown_button.setIcon(QIcon('ui/icon/icon_对话_markdown.png'))
-        self.markdown_button.setIconSize(QSize(14, 14))
-        self.markdown_button.clicked.connect(self.copy_markdown)
-        self.markdown_button.setEnabled(False)
-        self.markdown_button.setFlat(True)
-        self.markdown_button.hide()
-
-        # 删除按钮
-        self.delete_button = QPushButton(self)
-        self.delete_button.setFixedSize(QSize(20, 20))
-        self.delete_button.clicked.connect(self.delete_message)
-        self.delete_button.setIcon(QIcon('ui/icon/icon_对话_删除.png'))
-        self.delete_button.setIconSize(QSize(14, 14))
-        self.delete_button.setEnabled(False)
-        self.delete_button.setFlat(True)
-        self.delete_button.hide()
-        
-        # 应用按钮主题
         self.apply_button_theme()
 
-        # 根据消息类型创建消息
+        # ---------------- 消息本体 ----------------
         self.message = self.generate_msg(self.message, self.msg_type, self.user_send)
 
-        # 气泡布局
-        message_layout = QHBoxLayout()
-        message_layout.setSpacing(8)
-        message_layout.setContentsMargins(0, 5, 5, 5)
+        # ---------------- 左侧 Logo（仅 AI 显示） ----------------
+        self.ai_logo = QLabel(self)
+        if not self.user_send:
+            self.ai_logo.setPixmap(
+                QPixmap(ConfigManager().app_config['logo']).scaled(
+                    30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+            self.ai_logo.setFixedSize(30, 30)
+        else:
+            self.ai_logo.hide()
 
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(16)
-        button_layout.setContentsMargins(0, 0, 0, 0)
+        # ---------------- 气泡 + 按钮 列 ----------------
+        bubble_col = QVBoxLayout()
+        bubble_col.setSpacing(0)
+        bubble_col.setContentsMargins(0, 0, 0, 0)
 
-        if self.user_send:  # 如果是用户发送的消息，则添加space将气泡推到右边
-            message_layout.addItem(QSpacerItem(45 + 6, 35, QSizePolicy.Expanding, QSizePolicy.Minimum))
-            message_layout.addWidget(self.message, 1)
-        else:             # 如果是ai回复，则不添加space，直接在左边生成气泡
-            message_layout.addWidget(self.message, 1)
-            # 如果是AI回复的消息，则显示播放按钮
-            if (self.msg_type == MessageType.TEXT or self.msg_type == MessageType.TABLE) and self.need_button:
-                self.play_button.show()
-                button_layout.addWidget(self.play_button, 0, Qt.AlignLeft)
-                self.copy_button.show()
-                button_layout.addWidget(self.copy_button, 0, Qt.AlignLeft)
-                self.markdown_button.show()
-                button_layout.addWidget(self.markdown_button, 0, Qt.AlignLeft)
-                self.delete_button.show()
-                button_layout.addWidget(self.delete_button, 0, Qt.AlignLeft)
-                button_layout.addStretch(1)
-            
-            if self.need_button:
-                message_layout.addItem(QSpacerItem(45 + 6, 35, QSizePolicy.Expanding, QSizePolicy.Minimum))
-            else:
-                message_layout.addItem(QSpacerItem(45 + 6, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        # 1. 气泡行
+        msg_row = QHBoxLayout()
+        msg_row.setSpacing(8)
+        if self.user_send:  # 用户：先 spacer 后气泡
+            msg_row.addStretch()
+            msg_row.addWidget(self.message, 1)
+        else:  # AI：先气泡后 spacer
+            msg_row.addWidget(self.message, 1)
+            msg_row.addStretch()
+        bubble_col.addLayout(msg_row)
 
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addLayout(message_layout)
-        if self.need_button:
-            main_layout.addLayout(button_layout)
-        self.setLayout(main_layout)
+        # 2. 按钮行（仅 AI 且需要按钮）
+        if not self.user_send and self.need_button and \
+                self.msg_type in (MessageType.TEXT, MessageType.TABLE):
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(16)
+            for w in (self.play_button, self.copy_button, self.markdown_button, self.delete_button):
+                w.show()
+                btn_row.addWidget(w)
+            btn_row.addStretch()
+            bubble_col.addSpacing(4)
+            bubble_col.addLayout(btn_row)
+
+        # ---------------- 顶层两列：logo 列 + 内容列 ----------------
+        main_col = QVBoxLayout(self)  # 新增：垂直主布局
+        main_col.setSpacing(0)
+        main_col.setContentsMargins(0, 0, 0, 0)
+
+        # 🔽 关键：顶部留 6 px 空隙
+        main_col.addSpacing(6)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
+        top_row.setContentsMargins(0, 0, 0, 0)
+
+        if self.user_send:
+            top_row.addStretch()
+            top_row.addLayout(bubble_col, 1)
+        else:
+            logo_col = QVBoxLayout()
+            logo_col.addWidget(self.ai_logo, alignment=Qt.AlignTop)
+            logo_col.setSpacing(0)
+            logo_col.setContentsMargins(0, 0, 0, 0)
+
+            top_row.addLayout(logo_col)
+            top_row.addLayout(bubble_col, 1)
+            top_row.addStretch()
+
+        main_col.addLayout(top_row)  # 把原来的 top_row 塞进主列
 
     def generate_msg(self, message, msg_type, user_send):
         if msg_type == MessageType.TEXT:

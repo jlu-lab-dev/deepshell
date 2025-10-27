@@ -326,11 +326,28 @@ FUNCTION_MAP = {
 }
 
 def get_function_schemas():
-    """返回所有函数的 json schema 字符串，可用于 prompt 动态插入"""
-    json_path = os.path.join(os.path.dirname(__file__), "functions.json")
+    """返回所有函数的完整 json schema 字符串"""
+    json_path = os.path.join(os.path.dirname(__file__), "functions_sys.json")
     with open(json_path, "r", encoding="utf-8") as f:
         FUNCTION_SCHEMAS = json.load(f)
         return json.dumps(FUNCTION_SCHEMAS, ensure_ascii=False, indent=2)
+
+def get_tool_briefs():
+    """
+    返回一个简化的工具列表（仅含名称和描述），用于第一阶段的工具路由。
+    """
+    json_path = os.path.join(os.path.dirname(__file__), "functions_sys.json")
+    with open(json_path, "r", encoding="utf-8") as f:
+        full_schemas = json.load(f)
+
+    briefs = []
+    for schema in full_schemas:
+        briefs.append({
+            "name": schema.get("name"),
+            "description": schema.get("description")
+        })
+    return briefs
+
 
 if __name__ == "__main__":
     set_wallpaper(r"D:\AS\书影音\照片\cloud.jpg")

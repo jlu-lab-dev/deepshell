@@ -40,7 +40,7 @@ class RecallPage(QWidget):
         recall_test_label.setStyleSheet("""
                     width: 150px;
                     height: 18px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 18px;
                     color: #333333;
@@ -50,7 +50,7 @@ class RecallPage(QWidget):
         hint_label.setStyleSheet("""
                     width: 140px;
                     height: 14px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #999999;
@@ -72,7 +72,7 @@ class RecallPage(QWidget):
         sim_threshold_label.setStyleSheet("""
                     width: 248px;
                     height: 15px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #333333;
@@ -99,7 +99,7 @@ class RecallPage(QWidget):
         keyword_sim_weight_label.setStyleSheet("""
                     width: 112px;
                     height: 14px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #333333;
@@ -126,7 +126,7 @@ class RecallPage(QWidget):
         rerank_label.setStyleSheet("""
                             width: 112px;
                             height: 14px;
-                            font-family: Source Han Sans SC;
+                            font-family: Microsoft YaHei;
                             font-weight: 400;
                             font-size: 14px;
                             color: #333333;
@@ -153,7 +153,7 @@ class RecallPage(QWidget):
                     background: #FAFAFA;
                     border-radius: 8px;
                     border: 1px solid #CCCCCC;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 16px;
                     color: #333333;
@@ -164,7 +164,7 @@ class RecallPage(QWidget):
         test_label.setStyleSheet("""
                     width: 56px;
                     height: 14px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #333333;
@@ -188,7 +188,7 @@ class RecallPage(QWidget):
                         background: #FAFAFA;
                         border-radius: 8px;
                         border: 1px solid #CCCCCC;
-                        font-family: Source Han Sans SC;
+                        font-family: Microsoft YaHei;
                         font-weight: 400;
                         font-size: 16px;
                         color: #333333;
@@ -251,7 +251,7 @@ class RecallPage(QWidget):
         selected_file_label.setStyleSheet("""
             width: 78px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;
@@ -268,7 +268,7 @@ class RecallPage(QWidget):
         total_page_label.setStyleSheet("""
             width: 56px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;

@@ -6,7 +6,7 @@ from translation.language_dic import dic
 class LeftLangSelectButton(QPushButton):
     def __init__(self):
         super().__init__()
-        self.language_list = ['自动检测']
+        self.language_list = ['自动']
         for _,value in dic.items():
             self.language_list.append(value)
         self.init_ui()
@@ -14,7 +14,7 @@ class LeftLangSelectButton(QPushButton):
     def init_ui(self):
         self.setStyleSheet("""
             QPushButton {
-                width: 120px;
+                width: 90px;
                 height: 36px;
                 background: #2b2b2b;
                 border: 1px solid #3c3c3c;
@@ -28,10 +28,10 @@ class LeftLangSelectButton(QPushButton):
             }
         """)
 
-        self.current_language = "自动检测"
+        self.current_language = "自动"
         self.language_label = QLabel(self.current_language)
         self.language_label.setStyleSheet('''
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -81,7 +81,7 @@ class LeftLangSelectButton(QPushButton):
         name_label.setStyleSheet("""
             width: 87px;
             height: 16px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -120,7 +120,7 @@ class RightLangSelectButton(QPushButton):
     def init_ui(self):
         self.setStyleSheet("""
             QPushButton {
-                width: 120px;
+                width: 90px;
                 height: 36px;
                 background: #2b2b2b;
                 border: 1px solid #3c3c3c;
@@ -137,7 +137,7 @@ class RightLangSelectButton(QPushButton):
         self.current_language = "英语"
         self.language_label = QLabel(self.current_language)
         self.language_label.setStyleSheet('''
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;

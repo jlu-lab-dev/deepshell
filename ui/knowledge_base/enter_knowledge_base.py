@@ -52,7 +52,7 @@ class EnterKnowledgeBase(QWidget):
         self.setFixedSize(1250, 750)
         self.setStyleSheet("background: #F5F5F5;")
         self.setWindowTitle(f"{ConfigManager().app_config['name']} - 知识库")
-        self.setWindowIcon(QIcon("ui/icon/DeepShell/icon_app_logo_DeepShell_圆角.png"))
+        self.setWindowIcon(QIcon("ui/icon/DeepShell/shell.png"))
 
         # 整体布局
         mainLayout = QVBoxLayout(self)

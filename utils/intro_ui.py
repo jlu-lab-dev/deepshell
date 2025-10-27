@@ -26,7 +26,7 @@ class DocAnalysisIntroPage(QWidget):
         # 介绍文字
         self.welcome_label = QLabel("文档分析")
         self.welcome_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 20px;
                     color: #FFFEFE;
@@ -38,7 +38,7 @@ class DocAnalysisIntroPage(QWidget):
 
         self.intro_label = QLabel("借助自然语言处理技术，自动识别和提取文档中的关键信息，理解文本的语义，并将其进行结构化整理，一键实现长文档翻译总结，方便用户快速获取核心内容，高效阅读即刻拥有。")
         self.intro_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #B3B3B3;
