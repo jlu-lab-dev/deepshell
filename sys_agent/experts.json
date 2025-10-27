@@ -1,0 +1,26 @@
+[
+  {
+    "name": "file_management_expert",
+    "description": "处理文件和目录操作，如创建、读写、复制、移动、删除、查找文件。",
+    "tools_definition_file": "toolkits/file_management_tools.json",
+    "tools_implementation_module": "sys_agent.toolkits.file_management_tools"
+  },
+  {
+    "name": "browser_expert",
+    "description": "负责与浏览器相关的操作，如打开浏览器、进行网络搜索。",
+    "tools_definition_file": "toolkits/browser_tools.json",
+    "tools_implementation_module": "sys_agent.toolkits.browser_tools"
+  },
+  {
+    "name": "system_expert",
+    "description": "负责与操作系统相关的操作，如打开控制面板、打开蓝牙设置。",
+    "tools_definition_file": "toolkits/system_tools.json",
+    "tools_implementation_module": "sys_agent.toolkits.system_tools"
+  },
+  {
+    "name": "general_fallback_expert",
+    "description": "当其他专家都无法处理用户的请求时，由我来尝试回答。适用于无法通过工具完成的通用问题或闲聊。",
+    "tools_definition_file": null,
+    "tools_implementation_module": null
+  }
+]

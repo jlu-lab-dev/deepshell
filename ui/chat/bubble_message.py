@@ -49,7 +49,7 @@ class TextMessage(QLabel):
         html_text = markdown.markdown(self.msg_text)
         self.setText(html_text)
         self.setAlignment(Qt.AlignLeft)
-        
+
         self.apply_theme()
 
         self.font_metrics = QFontMetrics(QFont('微软雅黑', 12))
@@ -406,7 +406,7 @@ class BubbleMessage(QWidget):
         main_col.setContentsMargins(0, 0, 0, 0)
 
         # 🔽 关键：顶部留 6 px 空隙
-        main_col.addSpacing(6)
+        main_col.addSpacing(12)
 
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
