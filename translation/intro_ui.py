@@ -26,7 +26,7 @@ class TranslateIntroPage(QWidget):
         # 介绍文字
         self.welcome_label = QLabel("语种翻译")
         self.welcome_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 20px;
                     color: #FFFEFE;
@@ -38,7 +38,7 @@ class TranslateIntroPage(QWidget):
 
         self.intro_label = QLabel("长文短句精准译，阅读沟通无边界。语种翻译基于先进的语言模型，AI可以理解上下文语义，提供准确且自然流畅的翻译结果，满足日常交流和专业翻译需求。")
         self.intro_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #B3B3B3;

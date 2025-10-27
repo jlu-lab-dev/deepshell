@@ -31,7 +31,7 @@ class LeftLangSelectButton(QPushButton):
         self.current_language = "自动检测"
         self.language_label = QLabel(self.current_language)
         self.language_label.setStyleSheet('''
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -81,7 +81,7 @@ class LeftLangSelectButton(QPushButton):
         name_label.setStyleSheet("""
             width: 87px;
             height: 16px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -137,7 +137,7 @@ class RightLangSelectButton(QPushButton):
         self.current_language = "英语"
         self.language_label = QLabel(self.current_language)
         self.language_label.setStyleSheet('''
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -187,7 +187,7 @@ class RightLangSelectButton(QPushButton):
         name_label.setStyleSheet("""
             width: 87px;
             height: 16px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;

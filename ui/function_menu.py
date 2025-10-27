@@ -1,5 +1,5 @@
 from PyQt5.QtCore import pyqtSignal, Qt, QSize
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPainterPath
 from PyQt5.QtWidgets import QWidget, QGridLayout, QVBoxLayout, QPushButton, QLabel
 
 
@@ -80,8 +80,8 @@ class FunctionMenu(QWidget):
         # 创建主按钮容器
         btn = QPushButton()
         btn.setFixedSize(72, 72)
-        btn.setIcon(QIcon(icon_path))
-        btn.setIconSize(QSize(60, 60))
+        btn.setIcon(self.rounded_icon(icon_path, 72))
+        btn.setIconSize(QSize(72, 72))
 
         # 添加带参数的点击事件
         btn.clicked.connect(lambda checked, t=text: self.emit_function_signal(t))
@@ -92,7 +92,7 @@ class FunctionMenu(QWidget):
                     QLabel {
                         width: 56px;
                         height: 14px;
-                        font-family: Source Han Sans SC;
+                        font-family: Microsoft YaHei;
                         font-weight: 400;
                         font-size: 14px;
                         color: #FFFFFF;
@@ -120,6 +120,19 @@ class FunctionMenu(QWidget):
         container_layout.addWidget(btn,0,Qt.AlignCenter)
         container_layout.addWidget(text_label,0,Qt.AlignCenter)
         return container
+
+    def rounded_icon(self, path, size, radius=10):
+        pixmap = QPixmap(path).scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        mask = QPixmap(size, size)
+        mask.fill(Qt.transparent)
+        painter = QPainter(mask)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter_path = QPainterPath()
+        painter_path.addRoundedRect(0, 0, size, size, radius, radius)
+        painter.setClipPath(painter_path)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+        return QIcon(mask)
 
     def emit_function_signal(self, function_name):
         """统一信号发射方法"""

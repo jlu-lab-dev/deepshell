@@ -19,7 +19,7 @@ class ShadowWindow(QWidget):
         available_geometry = QApplication.desktop().availableGeometry()
         # 窗口尺寸 - 稍微窄一点，高度为屏幕的90%
         self.shadow_win_width = 450
-        self.shadow_win_height = int(available_geometry.height() * 0.9)
+        self.shadow_win_height = int(available_geometry.height() * 0.7)
         self.theme_manager = ThemeManager()
         self.init_ui()
         self._is_drag = False  # 拖动
@@ -49,7 +49,7 @@ class ShadowWindow(QWidget):
         # 标题中间的文字
         self.middle_label = QLabel()   # 中间的标签
         self.middle_label.setStyleSheet("""
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;

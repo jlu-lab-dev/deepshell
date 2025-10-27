@@ -26,7 +26,7 @@ class AudioTranscriptionIntroPage(QWidget):
         # 介绍文字
         self.welcome_label = QLabel("音频转写")
         self.welcome_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 20px;
                     color: #FFFEFE;
@@ -38,7 +38,7 @@ class AudioTranscriptionIntroPage(QWidget):
 
         self.intro_label = QLabel("音频转写功能基于人工智能技术，能够将音频内容快速、准确地转换为文字。它支持多种语言，适用于讲座笔记、播客制作、视频字幕等多种场景，能够显著提高工作效率并节省时间。")
         self.intro_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #B3B3B3;

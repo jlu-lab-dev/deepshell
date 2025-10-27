@@ -83,7 +83,7 @@ class ConfigurationPage(QWidget):
         config_label.setStyleSheet("""
             width: 35px;
             height: 17px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 18px;
             color: #333333;
@@ -94,7 +94,7 @@ class ConfigurationPage(QWidget):
         info_label.setStyleSheet("""
             width: 314px;
             height: 15px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #999999;
@@ -122,7 +122,7 @@ class ConfigurationPage(QWidget):
         kb_name_label.setStyleSheet("""
             width: 70px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;
@@ -138,7 +138,7 @@ class ConfigurationPage(QWidget):
         kb_img_label.setStyleSheet("""
             width: 70px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;
@@ -164,7 +164,7 @@ class ConfigurationPage(QWidget):
         chunk_info_title_label.setStyleSheet("""
             width: 85px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: bold;
             font-size: 18px;
             color: #333333;
@@ -181,7 +181,7 @@ class ConfigurationPage(QWidget):
         chunk_info_content_label.setStyleSheet("""
             width: 472px;
             height: 150px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;
@@ -194,7 +194,7 @@ class ConfigurationPage(QWidget):
         example_title_label.setStyleSheet("""
             width: 188px;
             height: 39px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: bold;
             font-size: 18px;
             color: #333333;
@@ -206,7 +206,7 @@ class ConfigurationPage(QWidget):
         example_content_label.setStyleSheet("""
             width: 188px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #333333;
@@ -237,7 +237,7 @@ class ConfigurationPage(QWidget):
                 background: #007AFF;
                 border: 1px solid #CCCCCC;
                 border-radius: 8px;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 16px;
                 color: #FFFFFF;
@@ -259,7 +259,7 @@ class ConfigurationPage(QWidget):
                 background: #FAFAFA;
                 border-radius: 8px;
                 border: 1px solid #CCCCCC;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-weight: 400;
                 font-size: 16px;
                 color: #333333;

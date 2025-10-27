@@ -26,7 +26,7 @@ class OcrIntroPage(QWidget):
         # 介绍文字
         self.welcome_label = QLabel("AI 识图")
         self.welcome_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 20px;
                     color: #FFFEFE;
@@ -38,7 +38,7 @@ class OcrIntroPage(QWidget):
 
         self.intro_label = QLabel("OCR（光学字符识别）功能能够快速将图片中的文字内容识别并转换为可编辑的文本格式，极大地提高了文字录入的效率。支持多种图片格式和文字语言，能准确识别其中的文字内容。")
         self.intro_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #B3B3B3;

@@ -6,7 +6,7 @@ import PyQt5.sip as sip
 
 from enum import Enum
 from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy, QMenu, QLabel
 
 from ai_audio.audio_task import AudioTask
@@ -936,10 +936,12 @@ class MainWinTitle(QWidget):
 
         self.title_name = QLabel(f"{ConfigManager().app_config['name']}")
         self.title_name.mousePressEvent = lambda event: self.parent().icon_clicked_event()
+        font = QFont("Microsoft YaHei", 16)
+        font.setWeight(QFont.Bold)
+        self.title_name.setFont(font)
         self.title_name.setStyleSheet(
             '''
             color:white;
-            font-size:16px;
             '''
         )
 

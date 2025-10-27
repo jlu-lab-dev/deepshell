@@ -26,7 +26,7 @@ class TableIntroPage(QWidget):
         # 介绍文字
         self.welcome_label = QLabel("AI 表格")
         self.welcome_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 20px;
                     color: #FFFEFE;
@@ -38,7 +38,7 @@ class TableIntroPage(QWidget):
 
         self.intro_label = QLabel("AI 表格功能能够帮助用户快速创建和编辑表格内容。它可以根据用户输入的关键信息，自动生成表格的结构和填充数据，大大节省手动整理的时间，提升工作效率。")
         self.intro_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #B3B3B3;

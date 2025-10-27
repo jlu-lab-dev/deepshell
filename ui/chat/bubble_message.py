@@ -425,6 +425,7 @@ class BubbleMessage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addLayout(message_layout)
         if self.need_button:
+            main_layout.addSpacing(4)
             main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
 
