@@ -24,8 +24,8 @@ class FullScreenWindow(QWidget):
         available_geometry = QApplication.desktop().availableGeometry()
         
         # 大屏模式尺寸
-        self.window_width = 1000
-        self.window_height = int(available_geometry.height() * 0.90)
+        self.window_width = 1200
+        self.window_height = int(available_geometry.height() * 0.70)
         
         # 内容区域宽度（对话区域）
         self.content_width = 850
@@ -64,6 +64,13 @@ class FullScreenWindow(QWidget):
         # 主布局 - 内容区域
         content_container = QWidget()
         content_container.setObjectName('content_container')
+        colors = self.theme_manager.get_colors()
+        content_container.setStyleSheet(f"""
+            QWidget#content_container {{
+                background: {colors['window_bg']};
+                border-radius: 0px;
+            }}
+        """)
         content_layout = QHBoxLayout(content_container)
         content_layout.setContentsMargins(20, 10, 20, 20)
         content_layout.setSpacing(15)
@@ -180,6 +187,7 @@ class FullScreenWindow(QWidget):
         """)
         
         scroll_content = QWidget()
+        scroll_content.setStyleSheet(f"background: {colors['window_bg']};")
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setContentsMargins(0, 0, 0, 0)
         scroll_layout.setSpacing(4)
@@ -370,7 +378,7 @@ class FullScreenWindow(QWidget):
         
         # 最小化按钮 - 圆形设计
         minimize_btn = QPushButton()
-        minimize_btn.setIcon(QIcon('ui/icon/icon_标题栏_最小化.png'))
+        minimize_btn.setIcon(QIcon('ui/icon/DeepShell/最小化.png'))
         minimize_btn.setIconSize(QSize(20, 20))
         minimize_btn.setFixedSize(36, 36)
         minimize_btn.setStyleSheet(f"""
