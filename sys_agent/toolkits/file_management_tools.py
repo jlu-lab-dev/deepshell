@@ -254,6 +254,53 @@ def save_text_as_word_doc(directory: str, filename: str, content: str):
         return atomic_result(False, f"保存 Word 文件失败: {e}")
 
 
+def clean_system_cache():
+    """
+    清理操作系统默认的临时/缓存文件夹，以释放磁盘空间。
+    能够自动识别 Windows, macOS, 和 Linux 的临时目录。
+    """
+    try:
+        system = platform.system()
+        if system == "Windows":
+            temp_dir = Path(os.environ.get('TEMP', 'C:/Windows/Temp'))
+        elif system == "Darwin":  # macOS
+            temp_dir = Path.home() / "Library/Caches"
+        else:  # Linux
+            temp_dir = Path.home() / ".cache"
+
+        if not temp_dir.exists() or not temp_dir.is_dir():
+            return atomic_result(False, f"缓存目录 '{temp_dir}' 不存在。")
+
+        cleaned_files_count = 0
+        cleaned_folders_count = 0
+        total_freed_space = 0
+
+        for item in temp_dir.iterdir():
+            try:
+                item_size = os.path.getsize(item) if item.is_file() else sum(
+                    f.stat().st_size for f in item.glob('**/*') if f.is_file())
+                if item.is_dir():
+                    shutil.rmtree(item)
+                    cleaned_folders_count += 1
+                else:
+                    item.unlink()
+                    cleaned_files_count += 1
+                total_freed_space += item_size
+            except Exception:
+                # 忽略正在被使用的文件
+                continue
+
+        freed_space_mb = round(total_freed_space / (1024 * 1024), 2)
+        message = (f"成功清理缓存。删除了 {cleaned_files_count} 个文件和 "
+                   f"{cleaned_folders_count} 个文件夹，释放了约 {freed_space_mb} MB 空间。")
+        return atomic_result(True, message,
+                             cleaned_files_count=cleaned_files_count,
+                             cleaned_folders_count=cleaned_folders_count,
+                             freed_space_mb=freed_space_mb)
+    except Exception as e:
+        return atomic_result(False, f"清理系统缓存时发生错误: {e}")
+
+
 # 工具映射表
 FUNCTION_MAP = {
     "get_user_folder_path": get_user_folder_path,
@@ -270,5 +317,6 @@ FUNCTION_MAP = {
     "get_current_directory": get_current_directory,
     "find_file": find_file,
     "read_table_data": read_table_data,
-    "save_text_as_word_doc": save_text_as_word_doc
+    "save_text_as_word_doc": save_text_as_word_doc,
+    "clean_system_cache": clean_system_cache,
 }

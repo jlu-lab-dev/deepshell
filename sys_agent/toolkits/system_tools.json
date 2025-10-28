@@ -98,5 +98,37 @@
       "properties": {},
       "required": []
     }
+  },
+  {
+    "name": "list_running_applications",
+    "description": "获取当前用户正在运行的、可以被关闭的应用程序进程列表。用于了解哪些非必要的应用在运行。",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "close_application_by_name",
+    "description": "根据进程名称（例如 'chrome.exe', 'notepad.exe'）关闭一个或多个正在运行的应用程序。用于释放系统资源。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "description": "要关闭的应用程序的进程名, 比如 'chrome.exe'"
+        }
+      },
+      "required": ["app_name"]
+    }
+  },
+  {
+    "name": "open_task_manager",
+    "description": "为用户打开操作系统的任务管理器（Windows）、活动监视器（macOS）或系统监视器（Linux）。当用户想要查看系统进程、检查性能或手动结束程序时使用此工具。",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
   }
 ]

@@ -265,5 +265,14 @@
         }
       }
     }
+  },
+  {
+    "name": "clean_system_cache",
+    "description": "清理操作系统的主要临时文件和缓存目录，用于解决电脑卡顿问题或释放磁盘空间。",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
   }
 ]
