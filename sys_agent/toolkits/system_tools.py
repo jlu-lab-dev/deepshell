@@ -65,7 +65,7 @@ def shutdown_system():
 def run_program(command):
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        return atomic_result(True, "命令执行完成", result.stdout + result.stderr)
+        return atomic_result(True, "命令执行完成")
     except Exception as e:
         return atomic_result(False, f"命令执行失败: {e}")
 

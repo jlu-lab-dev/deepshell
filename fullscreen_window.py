@@ -37,9 +37,12 @@ class FullScreenWindow(QWidget):
         self.init_ui()
         self._is_drag = False
         self.move_DragPosition = QPoint()
-        
+
+        self.mainwin.title_change_requested.connect(self.update_main_title)
         # 连接主题切换信号
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
+        if hasattr(self, 'mainwin') and self.mainwin:
+            self.mainwin.handle_function_selection("智能助手")
     
     def init_ui(self):
         self.setWindowTitle(ConfigManager().app_config['name'])
@@ -273,18 +276,18 @@ class FullScreenWindow(QWidget):
         icon_label.setPixmap(QPixmap(ConfigManager().app_config['logo']))
         
         # 标题 - 带渐变文字效果
-        title_label = QLabel(ConfigManager().app_config['name'])
+        self.title_label = QLabel(ConfigManager().app_config['name'])
         colors = self.theme_manager.get_colors()
-        title_label.setStyleSheet(f"""
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC";
-            font-weight: 700;
-            font-size: 20px;
-            color: {colors['title_text']};
-            letter-spacing: 0.5px;
-        """)
-        
+        self.title_label.setStyleSheet(f"""
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC";
+                font-weight: 700;
+                font-size: 20px;
+                color: {colors['title_text']};
+                letter-spacing: 0.5px;
+            """)
+
         logo_layout.addWidget(icon_label)
-        logo_layout.addWidget(title_label)
+        logo_layout.addWidget(self.title_label)
         
         title_layout.addWidget(logo_container)
         title_layout.addStretch()
@@ -560,3 +563,10 @@ class FullScreenWindow(QWidget):
             self.move(event.globalPos() - self.move_DragPosition)
             event.accept()
 
+    def update_main_title(self, text: str):
+        """Slot to handle title change requests from MainWin."""
+        if text == "系统功能" or text == "智能助手":
+            # In fullscreen mode, revert to the app's main name for the home function
+            self.title_label.setText(ConfigManager().app_config['name'])
+        else:
+            self.title_label.setText(text.upper())

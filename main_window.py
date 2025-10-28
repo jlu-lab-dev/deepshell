@@ -5,7 +5,7 @@ import re
 import datetime
 import PyQt5.sip as sip
 
-from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG
+from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG, pyqtSignal
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy, QMenu, QLabel
 
@@ -57,6 +57,9 @@ logging.basicConfig(level=logging.INFO)
 
 
 class MainWin(QWidget):
+
+    title_change_requested = pyqtSignal(str)
+
     def __init__(self, main_win_width, main_win_height):
         super().__init__()
         self.main_win_width = main_win_width
@@ -147,11 +150,10 @@ class MainWin(QWidget):
         self.function_menu_btn.function_selected.connect(self.handle_function_selection)
 
         hor_layout = QHBoxLayout()
-        hor_layout.setSpacing(12)  # 设置按钮间距
+        hor_layout.setSpacing(8)  # 设置按钮间距
         hor_layout.addWidget(self.new_dialog_btn)
         hor_layout.addWidget(self.knowledge_base_select_btn)
         hor_layout.addWidget(self.model_select_btn)
-        hor_layout.addStretch()  # 只在右边留空白
         hor_layout.addWidget(self.function_menu_btn)
         # 功能按钮 End
 
@@ -325,7 +327,8 @@ class MainWin(QWidget):
 
         config = self.page_mapping.get(function_name)
         if function_name != "知识库":
-            self.parent().change_title_midlabel(function_name)
+            self.title_change_requested.emit(function_name)
+            # self.parent().change_title_midlabel(function_name)
         self.current_func = function_name
 
         self.model_select_btn.set_current_model("DeepSeek-V3")
@@ -457,7 +460,7 @@ class MainWin(QWidget):
             elif self.current_func == "AI 绘画":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
             elif self.current_func == "系统功能":
-                self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, need_button=False, user_send=False)
+                self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             else:
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             self.speech_page.updateStatus('应答中')

@@ -143,6 +143,7 @@ class ShadowWindow(QWidget):
         self.title.title_layout.addWidget(self.close_btn)
         # 主窗口
         self.mainwin = MainWin(self.shadow_win_width, self.shadow_win_height - self.title.title_height)
+        self.mainwin.title_change_requested.connect(self.change_title_midlabel)
         self.mainwin.chat_box.update()
         self.mainwin.chat_box.set_scroll_bar_value(200)
         # 界面布局
