@@ -21,8 +21,8 @@ class KnowledgeBaseSelectButton(QPushButton):
     def init_ui(self):
         self.setStyleSheet("""
         QPushButton{
-                    width: 114px;
-                    height: 36px;
+                    width: 90px;
+                    height: 32px;
                     background: #2b2b2b;
                     border: 1px solid #3c3c3c;
                     border-radius: 8px;
@@ -37,33 +37,30 @@ class KnowledgeBaseSelectButton(QPushButton):
 
         # 图标
         self.icon_label = QLabel()
-        self.icon_label.setFixedSize(16, 16)
-        self.icon_label.setPixmap(QIcon("ui/icon/icon_输入框_知识库.png").pixmap(16, 16))
+        self.icon_label.setFixedSize(14, 14)
+        self.icon_label.setPixmap(QIcon("ui/icon/icon_输入框_知识库.png").pixmap(14, 14))
 
         # 模型名称
         self.name_label = QLabel("知识库")
         self.name_label.setStyleSheet("""
-            width: 41px;
-            height: 14px;
             font-family: Microsoft YaHei;
             font-weight: 400;
-            font-size: 14px;
+            font-size: 13px;
             color: #FFFFFF;
-            line-height: 18px;
         """)
 
         # 下拉箭头
         arrow_label = QLabel()
-        arrow_label.setFixedSize(16, 16)
+        arrow_label.setFixedSize(14, 14)
         arrow_label.setStyleSheet("""
             background: rgba(51,51,51,0);
         """)
-        arrow_label.setPixmap(QIcon("ui/icon/icon_输入框_下拉框.png").pixmap(16, 16))
+        arrow_label.setPixmap(QIcon("ui/icon/icon_输入框_下拉框.png").pixmap(14, 14))
 
         # 添加到布局
         layout = QHBoxLayout()
-        layout.setSpacing(7)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(5)
+        layout.setContentsMargins(10, 6, 10, 6)
         layout.addWidget(self.icon_label, 0, Qt.AlignVCenter)
         layout.addWidget(self.name_label)
         layout.addWidget(arrow_label, Qt.AlignRight)
