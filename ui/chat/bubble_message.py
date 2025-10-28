@@ -304,6 +304,120 @@ class GifLoadingMessage(QWidget):
         self.setLayout(layout)
 
 
+class WorkflowStepMessage(QWidget):
+
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+
+        # 状态图标 (GIF 或 PNG) - 这部分不变
+        self.icon_label = QLabel(self)
+        self.loading_movie = QMovie("ui/icon/loading.gif")
+        self.loading_movie.setScaledSize(QSize(18, 18))
+        self.icon_label.setMovie(self.loading_movie)
+        self.loading_movie.start()
+        self.icon_label.setFixedSize(QSize(18, 18))
+
+        # 状态文本 - 这部分不变
+        self.text_label = QLabel(text, self)
+        self.text_label.setWordWrap(True)
+        self.text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        font = QFont('Microsoft YaHei', 12)
+        font.setWeight(QFont.DemiBold)
+        self.text_label.setFont(font)
+        self.text_label.setStyleSheet("color: #e2e8f0; padding-left: 5px;")
+
+        # 1. 创建一个专门用于图标的垂直容器布局
+        icon_container_layout = QVBoxLayout()
+        icon_container_layout.setContentsMargins(0, 0, 0, 0)
+        icon_container_layout.addSpacing(3)
+        icon_container_layout.addWidget(self.icon_label, alignment=Qt.AlignHCenter | Qt.AlignTop)
+
+        # 2. 主水平布局
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 5)
+        layout.setSpacing(6)
+
+        # 3. 将新的图标容器布局和文本标签添加到主布局中
+        layout.addLayout(icon_container_layout, 0)
+        layout.addWidget(self.text_label, 1, alignment=Qt.AlignTop)
+
+    def set_finished(self, success: bool, message: str):
+        """更新组件到完成状态"""
+        self.loading_movie.stop()
+        if success:
+            icon_path = "ui/icon/DeepShell/success.png"
+            text_color = "#2dd4bf"
+        else:
+            icon_path = "ui/icon/DeepShell/failure.png"
+            text_color = "#f87171"
+
+        pixmap = QPixmap(icon_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.icon_label.setPixmap(pixmap)
+        self.text_label.setText(message)
+        self.text_label.setStyleSheet(f"color: {text_color}; padding-left: 5px;")
+
+
+class WorkflowContainerMessage(QWidget):
+    """
+    一个带Logo的容器，用于容纳一个或多个WorkflowStepMessage。
+    """
+    # 必须有delete_signal才能被ChatBox正确处理
+    delete_signal = pyqtSignal(QWidget)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+
+        # --- 以下是修改的核心部分 ---
+
+        # 1. 主布局改为垂直布局，与 BubbleMessage 保持一致
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # 2. 添加顶部 12px 间距，这是对齐的关键
+        main_layout.addSpacing(12)
+
+        # 3. 创建用于 Logo 和步骤的水平行布局
+        top_row_layout = QHBoxLayout()
+        top_row_layout.setContentsMargins(0, 0, 0, 0)
+        top_row_layout.setSpacing(8)
+
+        # --- Logo 和内容部分逻辑不变 ---
+
+        # 创建AI Logo
+        self.ai_logo = QLabel(self)
+        self.ai_logo.setPixmap(
+            QPixmap(ConfigManager().app_config['logo']).scaled(
+                30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+        self.ai_logo.setFixedSize(30, 30)
+
+        # 用于顶部对齐的Logo列
+        logo_col = QVBoxLayout()
+        logo_col.addWidget(self.ai_logo, alignment=Qt.AlignTop)
+
+        # 用于垂直排列所有步骤的布局
+        self.steps_layout = QVBoxLayout()
+        self.steps_layout.setSpacing(0)
+        self.steps_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 将Logo和步骤布局添加到水平行
+        top_row_layout.addLayout(logo_col)
+        top_row_layout.addLayout(self.steps_layout, 1)
+        top_row_layout.addStretch()
+
+        # 4. 将水平行布局添加到主垂直布局中
+        main_layout.addLayout(top_row_layout)
+
+    def add_step(self, text: str) -> WorkflowStepMessage:
+        """向容器中添加一个新的步骤，并返回该步骤的实例。"""
+        step_widget = WorkflowStepMessage(text)
+        self.steps_layout.addWidget(step_widget)
+        return step_widget
+
+
 class BubbleMessage(QWidget):
     speech_signal = pyqtSignal(bool, str, QWidget)
     delete_signal = pyqtSignal(QWidget)

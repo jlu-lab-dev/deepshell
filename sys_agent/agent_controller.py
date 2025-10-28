@@ -12,15 +12,23 @@ from sys_agent.agent_task import ProjectManagerTask, ExpertToolRecommenderTask, 
 
 
 def extract_json_from_string(text: str) -> str | None:
-    match = re.search(r'(\{.*\}|\[.*\])', text, re.DOTALL)
+    match = re.search(r'({.*}|\[.*\])', text, re.DOTALL)
     if match: return match.group(0)
     return None
 
 
 class AgentController(QObject):
-    update_signal = pyqtSignal(str)
+    # For simple fallback chats
     normal_update_signal = pyqtSignal(str)
     normal_finished_signal = pyqtSignal(str)
+
+    # New signals for structured workflow UI
+    # pyqtSignal(step_id, display_text)
+    workflow_step_started = pyqtSignal(str, str)
+    # pyqtSignal(step_id, success_bool, result_text)
+    workflow_step_finished = pyqtSignal(str, bool, str)
+
+    # Final signal when the entire workflow is done
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
 
@@ -36,8 +44,8 @@ class AgentController(QObject):
         self.pm_task.complete_signal.connect(self.handle_dispatch_result)
         self.expert_task.complete_signal.connect(self.handle_expert_recommendation)
         self.planner_task.complete_signal.connect(self.execute_workflow)
-        self.fallback_chat_task.update_signal.connect(self.emit_normal_update)
-        self.fallback_chat_task.complete_signal.connect(self.emit_normal_finished)
+        self.fallback_chat_task.update_signal.connect(self.normal_update_signal)
+        self.fallback_chat_task.complete_signal.connect(self.normal_finished_signal)
 
         # --- 动态加载专家和工具定义 ---
         self._load_definitions_and_functions()
@@ -78,8 +86,9 @@ class AgentController(QObject):
     @pyqtSlot(str)
     def start_workflow(self, user_input: str):
         """入口：启动项目经理进行专家调度"""
-        self.emit_update("收到复杂指令，正在组建项目团队...")
         self.execution_context = {"user_input": user_input}
+        # NOTE: We DON'T emit a signal here immediately. We wait for the dispatcher's result
+        # to decide if it's a real workflow or just a simple chat.
 
         topic = (f"【专家团队列表】\n{json.dumps(self.expert_briefs, ensure_ascii=False, indent=2)}\n\n"
                  f"【用户项目需求】\n{user_input}")
@@ -90,64 +99,56 @@ class AgentController(QObject):
     def handle_dispatch_result(self, dispatch_raw: str):
         """
         处理项目经理返回的专家列表。
-        - 如果列表中只包含 fallback 专家，则进入聊天模式。
-        - 否则，正常向列表中的所有专家分派任务。
+        - 如果列表中只包含 fallback 专家，则进入聊天模式 (no workflow UI)。
+        - 否则，启动工作流UI并继续。
         """
         logging.info(f"--- Raw Dispatcher Response ---:\n{dispatch_raw}\n---------------------------------")
 
         dispatch_json = extract_json_from_string(dispatch_raw)
-
         if not dispatch_json:
-            error_msg = "错误：调度员返回了无效的格式（未能提取出JSON）。"
-            logging.error(error_msg + f" Raw output was: {dispatch_raw}")
-            self.emit_error(error_msg)
+            self.error_signal.emit("Error: The dispatcher returned an invalid format.")
             return
 
         try:
-            # 处理列表
-            cleaned_json_str = dispatch_json.strip()
-            selected_expert_names = json.loads(cleaned_json_str)
-
+            selected_expert_names = json.loads(dispatch_json.strip())
             if not isinstance(selected_expert_names, list):
                 raise TypeError("Dispatcher response is not a list.")
-
         except (json.JSONDecodeError, TypeError) as e:
-            error_msg = f"错误：无法将调度员的响应解析为专家列表。Error: {e}"
-            logging.error(error_msg + f" Cleaned JSON was: {dispatch_json}")
-            self.emit_error(error_msg)
+            self.error_signal.emit(f"Error: Could not parse dispatcher response. Details: {e}")
             return
 
-        # 情况一：列表为空，或只包含 fallback 专家 (处理闲聊和无法处理的任务)
+        # Case 1: It's a simple chat, NOT a workflow.
         if not selected_expert_names or (
                 len(selected_expert_names) == 1 and selected_expert_names[0] == "general_fallback_expert"):
-            self.emit_update("正在准备回复...")
             user_input = self.execution_context.get("user_input")
-
-            # 直接启动聊天Task
             self.fallback_chat_task.set_topic(user_input)
             self.fallback_chat_task.start()
-            return  # 直接返回，跳过后续流程
+            return
 
-        # 情况二：列表包含一个或多个需要使用工具的专家
-        self.emit_update(f"团队组建完成：{', '.join(selected_expert_names)}。正在向各位专家征求工具建议...")
+        # Case 2: It IS a workflow. Now we start showing the UI steps.
+        self.workflow_step_started.emit("dispatch", "DeepShell 正在生成工作流，请稍等...")
+        self.workflow_step_finished.emit("dispatch", True, f"工作流生成完成")
 
         self.execution_context.update({
             "experts_to_consult": selected_expert_names,
             "recommended_tools": set(),
             "consulted_experts_count": 0
         })
+        self.workflow_step_started.emit("tool_gathering", "正在收集所需工具")
         self._consult_next_expert()
 
     def _consult_next_expert(self):
         """按顺序向专家列表中的下一个专家发起咨询"""
         ctx = self.execution_context
         if ctx["consulted_experts_count"] >= len(ctx["experts_to_consult"]):
+            # Finished consulting all experts
+            tool_names = list(ctx["recommended_tools"])
+            self.workflow_step_finished.emit("tool_gathering", True,
+                                             f"工具收集完成")
             self._start_chief_planning()
             return
 
         expert_name = ctx["experts_to_consult"][ctx["consulted_experts_count"]]
-        self.emit_update(f"正在咨询【{expert_name}】...")
-
         expert_tools = self.expert_tool_definitions.get(expert_name, [])
         tool_briefs = [{"name": t["name"], "description": t["description"]} for t in expert_tools]
 
@@ -165,9 +166,7 @@ class AgentController(QObject):
                 recommended_tool_names = json.loads(expert_json)
                 self.execution_context["recommended_tools"].update(recommended_tool_names)
             except json.JSONDecodeError:
-                self.emit_update("一位专家未能提供有效建议（JSON格式错误），已跳过。")
-        else:
-            self.emit_update("一位专家未能提供有效建议，已跳过。")
+                pass  # Ignore malformed recommendations
 
         self.execution_context["consulted_experts_count"] += 1
         self._consult_next_expert()
@@ -177,10 +176,10 @@ class AgentController(QObject):
         ctx = self.execution_context
         tool_names = list(ctx["recommended_tools"])
         if not tool_names:
-            self.emit_error("抱歉，所有专家均未推荐可用工具来完成您的请求。")
+            self.error_signal.emit("Sorry, no suitable tools were found to handle your request.")
             return
 
-        self.emit_update(f"工具收齐完毕：{', '.join(tool_names)}。正在制定最终工作流...")
+        self.workflow_step_started.emit("planning", "制定最终执行方案...")
 
         final_tool_schemas = []
         all_defined_tools = [tool for tools in self.expert_tool_definitions.values() for tool in tools]
@@ -200,12 +199,17 @@ class AgentController(QObject):
         """接收到总规划师的工作流，由Python代码（执行器）执行"""
         workflow_json = extract_json_from_string(workflow_raw)
         if not workflow_json:
-            self.emit_error("错误：总规划师未能生成有效的工作流。")
+            self.workflow_step_finished.emit("planning", False,
+                                             "Error: The planner failed to generate a valid workflow.")
+            self.error_signal.emit("Aborting due to planning failure.")
             return
         try:
             workflow = json.loads(workflow_json)
+            self.workflow_step_finished.emit("planning", True, f"执行方案制定完成，共 {len(workflow)} 步")
         except json.JSONDecodeError:
-            self.emit_error("错误：总规划师生成的工作流JSON格式无效。")
+            self.workflow_step_finished.emit("planning", False,
+                                             "Error: The planner generated invalid JSON for the workflow.")
+            self.error_signal.emit("Aborting due to planning failure.")
             return
 
         self.execution_context.update({
@@ -216,77 +220,63 @@ class AgentController(QObject):
         self.execute_next_step()
 
     def execute_next_step(self):
-        """执行工作流中的下一步（这部分就是纯代码的执行器）"""
+        """执行工作流中的下一步"""
         ctx = self.execution_context
         if ctx["current_step_index"] >= len(ctx["workflow"]):
-            self.emit_finished("<br>---<br><b>所有任务已完成！</b>")
+            self.finished_signal.emit("All tasks have been completed!")
             return
 
         step = ctx["workflow"][ctx["current_step_index"]]
         tool_name = step.get("tool")
-        args = step.get("args", {})
-        description = step.get("description", f"执行工具: {tool_name}")
+        description = step.get("description", f"Executing tool: {tool_name}")
+        step_id = step.get("step_id", f"step_{ctx['current_step_index'] + 1}")
 
-        self.emit_update(f"<br>---<br><b>正在执行步骤 {ctx['current_step_index'] + 1}:</b> {description}")
+        self.workflow_step_started.emit(step_id, description)
 
         try:
-            resolved_args = self._resolve_args(args, ctx["outputs"])
+            resolved_args = self._resolve_args(step.get("args", {}), ctx["outputs"])
 
             if tool_name and tool_name in self.MASTER_FUNCTION_MAP:
                 func = self.MASTER_FUNCTION_MAP[tool_name]
                 result = func(**resolved_args)
 
-                step_id = step.get("step_id", f"step_{ctx['current_step_index'] + 1}")
                 ctx["outputs"][step_id] = result
-
-                status = "成功" if result.get("success") else "失败"
-                message = str(result.get("message", "无信息"))
-                self.emit_update(f"<br>状态: {status}<br>结果: {message}")
+                message = str(result.get("message", "No details provided."))
 
                 if result.get("success"):
+                    self.workflow_step_finished.emit(step_id, True, f"Success: {message}")
                     ctx["current_step_index"] += 1
                     QTimer.singleShot(100, self.execute_next_step)
                 else:
-                    self.emit_error("<br>---<br><b>任务因步骤失败而中止。</b>")
+                    self.workflow_step_finished.emit(step_id, False, f"Failed: {message}")
+                    self.error_signal.emit("任务执行失败，请检查日志")
             else:
-                self.emit_error(f"<br>错误：工作流指定了未知的工具 '{tool_name}'。")
+                self.workflow_step_finished.emit(step_id, False, f"Error: Unknown tool '{tool_name}' specified.")
+                self.error_signal.emit(f"Aborting: Unknown tool '{tool_name}'.")
 
         except Exception as e:
-            self.emit_error(f"<br>执行步骤时发生意外错误: {str(e)}")
+            self.workflow_step_finished.emit(step_id, False, f"An unexpected error occurred: {str(e)}")
+            self.error_signal.emit(f"Aborting due to an unexpected error: {str(e)}")
 
     def _resolve_args(self, args: dict, outputs: dict) -> dict:
+        # This function remains unchanged, it's correct.
         resolved_args = {}
         for key, value in args.items():
             if isinstance(value, str) and value.startswith("$outputs."):
                 match = re.match(r"\$outputs\.([\w_]+)\.([\w_]+)(?:\[(\d+)\])?", value)
-                if not match: raise ValueError(f"无效的输出引用格式: {value}")
+                if not match: raise ValueError(f"Invalid output reference format: {value}")
                 ref_step_id, ref_key, ref_index = match.groups()
-                if ref_step_id not in outputs: raise ValueError(f"找不到步骤 '{ref_step_id}' 的输出。")
+                if ref_step_id not in outputs: raise ValueError(f"Could not find output for step '{ref_step_id}'.")
                 ref_value = outputs[ref_step_id].get(ref_key)
                 if ref_index is not None:
-                    if not isinstance(ref_value, list): raise ValueError(f"试图对非列表类型的结果进行索引: {ref_key}")
+                    if not isinstance(ref_value, list): raise ValueError(
+                        f"Attempted to index a non-list result: {ref_key}")
                     try:
                         resolved_args[key] = ref_value[int(ref_index)]
                     except IndexError:
-                        raise ValueError(f"索引超出范围: {value}")
+                        raise ValueError(f"Index out of range for: {value}")
                 else:
                     resolved_args[key] = ref_value
             else:
                 resolved_args[key] = value
         return resolved_args
-
-    def emit_update(self, message: str):
-        self.update_signal.emit(message)
-
-    def emit_normal_update(self, message: str):
-        self.normal_update_signal.emit(message)
-
-    def emit_normal_finished(self, message: str):
-        self.normal_finished_signal.emit(message)
-
-    def emit_finished(self, message: str):
-        self.finished_signal.emit(message)
-
-    def emit_error(self, message: str):
-        self.error_signal.emit(message)
-

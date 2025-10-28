@@ -44,7 +44,8 @@ from draw.drawing_task import AiDrawingTask
 from server_check import ServerCheck
 from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
 from ui.button.model_select_button import ModelSelectButton
-from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage ,ThumbnailMessage,ButtonMessage
+from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage, ThumbnailMessage, ButtonMessage, \
+    WorkflowStepMessage, WorkflowContainerMessage
 from ui.chat.chat_box import ChatBox
 from ui.page.speech_page import SpeechPage
 from ui.button.function_menu_button import FunctionMenuButton
@@ -308,16 +309,22 @@ class MainWin(QWidget):
         self.timerSend = QTimer(self)
         self.timerSend.timeout.connect(self.listeningToWaiting)  # "聆听中"到"等待中"的自动转换
 
+        # --- Agent Controller Setup ---
         self.agent_thread = QThread()
         self.agent_controller = AgentController()
-
-        # 将controller移动到新线程，以防阻塞UI
         self.agent_controller.moveToThread(self.agent_thread)
 
-        # 连接AgentController的信号到MainWin中的槽
-        self.agent_controller.update_signal.connect(self.handle_agent_update)
+        # A dictionary to hold references to workflow step widgets
+        self.workflow_step_widgets = {}
+        self.current_workflow_container = None
+
+        # Connect AgentController signals
+        # For simple chats (fallback)
         self.agent_controller.normal_update_signal.connect(self.update_ai_message)
         self.agent_controller.normal_finished_signal.connect(self.ai_callback)
+        # For complex workflows
+        self.agent_controller.workflow_step_started.connect(self.handle_workflow_step_started)
+        self.agent_controller.workflow_step_finished.connect(self.handle_workflow_step_finished)
         self.agent_controller.finished_signal.connect(self.handle_agent_finished)
         self.agent_controller.error_signal.connect(self.handle_agent_error)
 
@@ -540,36 +547,46 @@ class MainWin(QWidget):
         # 启用发送按钮
         self.input_field.set_send_button_status(True)
 
-    def handle_agent_update(self, message):
-        """接收Agent的增量更新，并更新到UI气泡上"""
+    def handle_workflow_step_started(self, step_id: str, text: str):
+        """Handles the start of a workflow step."""
         self.show_waiting_message(False)
-        if self.current_bubble_message:
-            current_text = self.current_bubble_message.message.text()
-            self.current_bubble_message.message.update_text(current_text + message)
+
+        # 如果当前没有容器，说明这是工作流的第一步
+        if self.current_workflow_container is None:
+            # 创建一个新的容器并添加到聊天框
+            self.current_workflow_container = WorkflowContainerMessage()
+            self.chat_box.add_message_item(self.current_workflow_container)
+
+        # 在当前容器中添加一个新的步骤
+        step_widget = self.current_workflow_container.add_step(text)
+
+        # 存储这个步骤的引用，以便后续更新
+        self.workflow_step_widgets[step_id] = step_widget
+
+    def handle_workflow_step_finished(self, step_id: str, success: bool, message: str):
+        """Finds an existing step widget and updates it to its 'finished' state."""
+        step_widget = self.workflow_step_widgets.get(step_id)
+        if step_widget:
+            step_widget.set_finished(success, message)
+        else:
+            # Fallback in case the 'start' signal was missed
+            print(f"Warning: Could not find a widget for step_id '{step_id}' to update.")
+            final_message = f"[{'SUCCESS' if success else 'FAIL'}] {message}"
+            # You could add a simple text bubble here as a fallback if you want
+            # self.add_bubble_message(final_message, user_send=False)
 
     def handle_agent_finished(self, final_message):
-        """接收Agent成功结束的信号"""
-        self.show_waiting_message(False)
-        if self.current_bubble_message:
-            current_text = self.current_bubble_message.message.text()
-            self.current_bubble_message.message.update_text(current_text + final_message)
-            self.current_bubble_message.update_button_status(True)
-
-        # 恢复UI
+        """Receives Agent successful completion signal."""
         self.input_field.set_send_button_status(True)
-        self.current_bubble_message = None  # 清理当前气泡引用
+        self.current_workflow_container = None  # 重置容器
+        # self.add_bubble_message(f"<b>✅ {final_message}</b>", user_send=False)
 
     def handle_agent_error(self, error_message):
-        """接收Agent发生错误的信号"""
+        """Receives Agent error signal."""
         self.show_waiting_message(False)
-        if self.current_bubble_message:
-            current_text = self.current_bubble_message.message.text()
-            self.current_bubble_message.message.update_text(current_text + error_message)
-            # 可以考虑给错误的气泡加上一个特殊的标记或样式
-
-        # 恢复UI
+        self.add_bubble_message(f"<b>❌ Workflow Error:</b><br>{error_message}", user_send=False)
         self.input_field.set_send_button_status(True)
-        self.current_bubble_message = None  # 清理当前气泡引用
+        self.current_workflow_container = None  # 重置容器
 
     def send_quest_to_ai(self, message):
         self.current_input = message
@@ -591,33 +608,25 @@ class MainWin(QWidget):
             self.speech_page.updateStatus('休眠中')
 
     def handle_send_message(self, user_input, full_message, thumbnail_list):
-        # 判断当前页面如果是gui就跳转聊天
         self.add_bubble_message(user_input, True, thumbnail_list=thumbnail_list)
 
+        if self.contentStackWgt.currentWidget() != self.chat_box:
+            self.contentStackWgt.setCurrentWidget(self.chat_box)
+
         if self.current_func == "系统功能":
-            # 如果是系统功能，直接启动Agent Controller，并立即返回
-            if self.contentStackWgt.currentWidget() != self.chat_box:
-                self.contentStackWgt.setCurrentWidget(self.chat_box)
-
-            # 1. 创建一个空的气泡，作为Agent后续更新内容的“画布”
-            self.current_bubble_message = BubbleMessage('', '', msg_type=MessageType.TEXT, font_size=12,
-                                                        user_send=False)
-            self.chat_box.add_message_item(self.current_bubble_message)
-
-            # 2. 跨线程调用Agent Controller的入口函数开始工作
-            self.current_input = full_message  # 确保current_input被设置
+            # Show a generic waiting message immediately for better user feedback
+            self.show_waiting_message(True)
+            # Start the agent controller workflow
             QMetaObject.invokeMethod(self.agent_controller, "start_workflow", Qt.QueuedConnection,
                                      Q_ARG(str, full_message))
-            return  # 提前返回，不执行下面的send_quest_to_ai
+            return
 
-        # 对于其他所有功能，保持原有逻辑
-        if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:  # AI模型检索
-            if self.contentStackWgt.currentWidget() != self.chat_box:
-                self.contentStackWgt.setCurrentWidget(self.chat_box)
+        # For all other functions, maintain the original logic
+        if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:
             self.send_quest_to_ai(full_message)
-        elif self.mode == AssistantMode.PAINT:  # 文字绘图
+        elif self.mode == AssistantMode.PAINT:
             self.send_paint_to_ai(full_message)
-        else:  # 会议纪要
+        else:
             self.add_bubble_message("会议纪要暂未实现", False)
 
     def handle_send_voice_message(self, message):
@@ -661,6 +670,9 @@ class MainWin(QWidget):
         self.sendTask.update_signal.connect(self.update_ai_message)
 
         # 重置界面
+        self.workflow_step_widgets.clear()
+        self.current_workflow_container = None
+
         self.chat_box.clearLayout()
         self.input_field.show()
         self.chat_intro.show()

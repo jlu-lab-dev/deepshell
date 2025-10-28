@@ -101,7 +101,9 @@ class ShadowWindow(QWidget):
         self.action_light.triggered.connect(lambda: self.theme_manager.set_theme('light'))
         theme_menu.addAction(self.action_dark)
         theme_menu.addAction(self.action_light)
-        
+
+        menu.addAction("记忆管理", self.show_config_page)
+
         menu.addAction("配置", self.show_config_page)
         menu.addSeparator()
         menu.addAction("关于", self.show_about_page)

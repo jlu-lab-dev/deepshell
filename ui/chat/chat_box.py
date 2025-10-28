@@ -137,7 +137,8 @@ class ChatBox(QWidget):
 
     def add_message_item(self, bubble_message, index=1):
         if index:
-            bubble_message.delete_signal.connect(self.remove_message_item)
+            if hasattr(bubble_message, 'delete_signal'):
+                bubble_message.delete_signal.connect(self.remove_message_item)
             self.msg_layout.addWidget(bubble_message)
         else:
             item_count = self.msg_layout.count()
