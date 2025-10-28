@@ -1,3 +1,5 @@
+# chat_box.py
+
 from PyQt5.QtCore import pyqtSignal, Qt, QEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSpacerItem, QSizePolicy, QScrollBar, QScrollArea
 
@@ -135,7 +137,8 @@ class ChatBox(QWidget):
 
     def add_message_item(self, bubble_message, index=1):
         if index:
-            bubble_message.delete_signal.connect(self.remove_message_item)
+            if hasattr(bubble_message, 'delete_signal'):
+                bubble_message.delete_signal.connect(self.remove_message_item)
             self.msg_layout.addWidget(bubble_message)
         else:
             item_count = self.msg_layout.count()

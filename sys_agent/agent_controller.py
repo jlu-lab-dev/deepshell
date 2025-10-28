@@ -1,225 +1,282 @@
+# agent_controller.py
+
 import json
+import logging
 import re
+import os
+import importlib
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, pyqtSlot
 
-from sys_agent.sys_agent_task import WorkflowPlannerTask, WorkflowExecutorTask, ToolRouterTask
-from sys_agent.toolkit_sys import FUNCTION_MAP, get_function_schemas, get_tool_briefs
+from chat.chat_task import ChatTask
+from sys_agent.agent_task import ProjectManagerTask, ExpertToolRecommenderTask, ChiefPlannerTask
 
 
-def extract_json_from_string(text):
-    """
-    从可能包含Markdown标记或其他文本的字符串中提取出第一个有效的JSON对象或数组。
-    """
-    # 寻找第一个 '{' 或 '['，这是JSON的开始
-    first_brace = text.find('{')
-    first_bracket = text.find('[')
-
-    if first_brace == -1 and first_bracket == -1:
-        return None  # 没有找到任何JSON的起始符号
-
-    # 确定JSON是从 '{' 开始还是从 '[' 开始
-    if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
-        start_char = '{'
-        end_char = '}'
-        start_index = first_brace
-    else:
-        start_char = '['
-        end_char = ']'
-        start_index = first_bracket
-
-    # 从起始位置开始，寻找与之匹配的结束符号
-    # 这是一个简化的匹配，对于复杂的嵌套JSON可能不够完美，但对大多数情况有效
-    # 更稳健的方法是使用正则表达式
-    # 使用正则表达式查找被 `[]` 或 `{}` 包围的最外层内容
-    match = re.search(r'(\{.*\}|\[.*\])', text[start_index:], re.DOTALL)
-    if match:
-        return match.group(0)
-
-    return None  # 如果正则没有匹配到，则返回None
+def extract_json_from_string(text: str) -> str | None:
+    match = re.search(r'({.*}|\[.*\])', text, re.DOTALL)
+    if match: return match.group(0)
+    return None
 
 
 class AgentController(QObject):
-    """
-    负责处理所有与AI Agent相关的业务逻辑，与UI完全分离。
-    通过信号与主窗口通信。
-    """
-    # --- 定义信号 ---
-    update_signal = pyqtSignal(str)  # 用于发送增量更新的文本
-    finished_signal = pyqtSignal(str)  # 用于发送工作流成功结束的消息
-    error_signal = pyqtSignal(str)  # 用于发送错误信息
+    # For simple fallback chats
+    normal_update_signal = pyqtSignal(str)
+    normal_finished_signal = pyqtSignal(str)
+
+    # New signals for structured workflow UI
+    # pyqtSignal(step_id, display_text)
+    workflow_step_started = pyqtSignal(str, str)
+    # pyqtSignal(step_id, success_bool, result_text)
+    workflow_step_finished = pyqtSignal(str, bool, str)
+
+    # Final signal when the entire workflow is done
+    finished_signal = pyqtSignal(str)
+    error_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
-        # 【修改】初始化三个智能体
-        self.router_task = ToolRouterTask()
-        self.planner_task = WorkflowPlannerTask()
-        self.executor_task = WorkflowExecutorTask()
+        # --- 初始化所有智能体Task ---
+        self.pm_task = ProjectManagerTask()
+        self.expert_task = ExpertToolRecommenderTask()
+        self.planner_task = ChiefPlannerTask()
+        self.fallback_chat_task = ChatTask()
 
-        # 【修改】连接各自的信号到处理函数
-        self.router_task.complete_signal.connect(self.handle_router_result)
-        self.planner_task.complete_signal.connect(self.execute_plan)
-        self.executor_task.complete_signal.connect(self.handle_executor_result)
+        # --- 连接信号 ---
+        self.pm_task.complete_signal.connect(self.handle_dispatch_result)
+        self.expert_task.complete_signal.connect(self.handle_expert_recommendation)
+        self.planner_task.complete_signal.connect(self.execute_workflow)
+        self.fallback_chat_task.update_signal.connect(self.normal_update_signal)
+        self.fallback_chat_task.complete_signal.connect(self.normal_finished_signal)
 
-        # 【修改】加载并缓存两种工具描述
-        try:
-            self.tool_briefs = get_tool_briefs()  # 用于路由
-            full_schemas_str = get_function_schemas()
-            self.full_function_schemas = json.loads(full_schemas_str)  # 用于规划
-        except Exception as e:
-            self.tool_briefs = []
-            self.full_function_schemas = []
-            print(f"CRITICAL ERROR: Failed to load tools. Error: {e}")
+        # --- 动态加载专家和工具定义 ---
+        self._load_definitions_and_functions()
 
         self.execution_context = {}
 
+    def _load_definitions_and_functions(self):
+        """动态加载所有专家的定义，并合并所有工具的实现函数"""
+        self.experts = []
+        self.expert_briefs = []
+        self.expert_tool_definitions = {}
+        self.MASTER_FUNCTION_MAP = {}  # 创建一个总的FUNCTION_MAP
+
+        try:
+            base_path = os.path.dirname(__file__)
+            with open(os.path.join(base_path, "experts.json"), "r", encoding="utf-8") as f:
+                self.experts = json.load(f)
+
+            self.expert_briefs = [{"name": e["name"], "description": e["description"]} for e in self.experts]
+
+            for expert in self.experts:
+                expert_name = expert["name"]
+
+                # 加载工具定义JSON
+                if expert["tools_definition_file"]:
+                    with open(os.path.join(base_path, expert["tools_definition_file"]), "r", encoding="utf-8") as f:
+                        self.expert_tool_definitions[expert_name] = json.load(f)
+
+                # 动态导入工具实现模块并合并FUNCTION_MAP
+                if expert["tools_implementation_module"]:
+                    module = importlib.import_module(expert["tools_implementation_module"])
+                    if hasattr(module, 'FUNCTION_MAP'):
+                        self.MASTER_FUNCTION_MAP.update(module.FUNCTION_MAP)
+
+        except Exception as e:
+            print(f"CRITICAL ERROR: Failed to load agent definitions or tool functions: {e}")
+
     @pyqtSlot(str)
     def start_workflow(self, user_input: str):
-        """工作流的公共入口点，现在启动的是路由阶段。"""
-        self.emit_update("收到指令，正在分析所需工具...")
-        self.execution_context = {"user_input": user_input}  # 存储用户原始输入
+        """入口：启动项目经理进行专家调度"""
+        self.execution_context = {"user_input": user_input}
+        # NOTE: We DON'T emit a signal here immediately. We wait for the dispatcher's result
+        # to decide if it's a real workflow or just a simple chat.
 
-        # --- 阶段一：路由 ---
-        topic_with_context = (
-            f"【可用工具清单】\n"
-            f"{json.dumps(self.tool_briefs, ensure_ascii=False, indent=2)}\n\n"
-            f"【用户请求】\n"
-            f"{user_input}"
-        )
-        self.router_task.set_topic(topic_with_context)
-        self.router_task.start()
+        topic = (f"【专家团队列表】\n{json.dumps(self.expert_briefs, ensure_ascii=False, indent=2)}\n\n"
+                 f"【用户项目需求】\n{user_input}")
+        self.pm_task.set_topic(topic)
+        self.pm_task.start()
 
     @pyqtSlot(str)
-    def handle_router_result(self, selected_tools_raw: str):
-        """处理路由结果，筛选工具，然后启动规划阶段。"""
-        self.emit_update("工具分析完成，正在为您制定执行计划...")
+    def handle_dispatch_result(self, dispatch_raw: str):
+        """
+        处理项目经理返回的专家列表。
+        - 如果列表中只包含 fallback 专家，则进入聊天模式 (no workflow UI)。
+        - 否则，启动工作流UI并继续。
+        """
+        logging.info(f"--- Raw Dispatcher Response ---:\n{dispatch_raw}\n---------------------------------")
 
-        selected_tools_json = extract_json_from_string(selected_tools_raw)
-        if not selected_tools_json:
-            self.emit_error("错误：工具路由智能体返回了无效的格式。")
+        dispatch_json = extract_json_from_string(dispatch_raw)
+        if not dispatch_json:
+            self.error_signal.emit("Error: The dispatcher returned an invalid format.")
             return
 
         try:
-            selected_tool_names = json.loads(selected_tools_json)
-            if not isinstance(selected_tool_names, list):
-                raise json.JSONDecodeError("Not a list", selected_tools_json, 0)
-        except json.JSONDecodeError:
-            self.emit_error("错误：工具路由结果不是一个有效的工具名称列表。")
+            selected_expert_names = json.loads(dispatch_json.strip())
+            if not isinstance(selected_expert_names, list):
+                raise TypeError("Dispatcher response is not a list.")
+        except (json.JSONDecodeError, TypeError) as e:
+            self.error_signal.emit(f"Error: Could not parse dispatcher response. Details: {e}")
             return
 
-        if not selected_tool_names:
-            self.emit_error("抱歉，根据您的请求，没有找到可以使用的工具。")
+        # Case 1: It's a simple chat, NOT a workflow.
+        if not selected_expert_names or (
+                len(selected_expert_names) == 1 and selected_expert_names[0] == "general_fallback_expert"):
+            user_input = self.execution_context.get("user_input")
+            self.fallback_chat_task.set_topic(user_input)
+            self.fallback_chat_task.start()
             return
 
-        # --- 筛选详细的工具Schema ---
-        filtered_schemas = [
-            schema for schema in self.full_function_schemas
-            if schema.get("name") in selected_tool_names
-        ]
-        filtered_schemas_str = json.dumps(filtered_schemas, ensure_ascii=False, indent=2)
+        # Case 2: It IS a workflow. Now we start showing the UI steps.
+        self.workflow_step_started.emit("dispatch", "DeepShell 正在生成工作流，请稍等...")
+        self.workflow_step_finished.emit("dispatch", True, f"工作流生成完成")
 
-        # --- 阶段二：规划 ---
-        user_input = self.execution_context.get("user_input")
-        topic_with_context = (
-            f"【可用工具】\n"
-            f"{filtered_schemas_str}\n\n"
-            f"【用户请求】\n"
-            f"{user_input}"
-        )
-        self.planner_task.set_topic(topic_with_context)
+        self.execution_context.update({
+            "experts_to_consult": selected_expert_names,
+            "recommended_tools": set(),
+            "consulted_experts_count": 0
+        })
+        self.workflow_step_started.emit("tool_gathering", "正在收集所需工具")
+        self._consult_next_expert()
+
+    def _consult_next_expert(self):
+        """按顺序向专家列表中的下一个专家发起咨询"""
+        ctx = self.execution_context
+        if ctx["consulted_experts_count"] >= len(ctx["experts_to_consult"]):
+            # Finished consulting all experts
+            tool_names = list(ctx["recommended_tools"])
+            self.workflow_step_finished.emit("tool_gathering", True,
+                                             f"工具收集完成")
+            self._start_chief_planning()
+            return
+
+        expert_name = ctx["experts_to_consult"][ctx["consulted_experts_count"]]
+        expert_tools = self.expert_tool_definitions.get(expert_name, [])
+        tool_briefs = [{"name": t["name"], "description": t["description"]} for t in expert_tools]
+
+        topic = (f"【你的专属工具清单】\n{json.dumps(tool_briefs, ensure_ascii=False, indent=2)}\n\n"
+                 f"【用户总体请求】\n{ctx['user_input']}")
+        self.expert_task.set_topic(topic)
+        self.expert_task.start()
+
+    @pyqtSlot(str)
+    def handle_expert_recommendation(self, expert_raw: str):
+        """收集一位专家的工具推荐，并继续咨询下一位"""
+        expert_json = extract_json_from_string(expert_raw)
+        if expert_json:
+            try:
+                recommended_tool_names = json.loads(expert_json)
+                self.execution_context["recommended_tools"].update(recommended_tool_names)
+            except json.JSONDecodeError:
+                pass  # Ignore malformed recommendations
+
+        self.execution_context["consulted_experts_count"] += 1
+        self._consult_next_expert()
+
+    def _start_chief_planning(self):
+        """所有专家咨询完毕后，启动总规划师"""
+        ctx = self.execution_context
+        tool_names = list(ctx["recommended_tools"])
+        if not tool_names:
+            self.error_signal.emit("Sorry, no suitable tools were found to handle your request.")
+            return
+
+        self.workflow_step_started.emit("planning", "制定最终执行方案...")
+
+        final_tool_schemas = []
+        all_defined_tools = [tool for tools in self.expert_tool_definitions.values() for tool in tools]
+        for name in tool_names:
+            for schema in all_defined_tools:
+                if schema["name"] == name:
+                    final_tool_schemas.append(schema)
+                    break
+        self.workflow_step_finished.emit("available_tools", True, f"共收集到 {len(all_defined_tools)} 个可用工具…")
+        topic = (f"【项目可用工具集】\n{json.dumps(final_tool_schemas, ensure_ascii=False, indent=2)}\n\n"
+                 f"【用户原始请求】\n{ctx['user_input']}")
+        self.planner_task.set_topic(topic)
         self.planner_task.start()
 
     @pyqtSlot(str)
-    def execute_plan(self, plan_raw_output: str):
-        # ... (此函数及之后的所有函数，包括 execute_next_step 和 handle_executor_result，都【保持不变】) ...
-        # ... 因为它们只关心“计划”本身，不关心计划是怎么来的。
-        plan_json_str = extract_json_from_string(plan_raw_output)
-        if not plan_json_str:
-            self.emit_error("错误：未能从模型返回内容中提取出有效的计划。")
+    def execute_workflow(self, workflow_raw: str):
+        """接收到总规划师的工作流，由Python代码（执行器）执行"""
+        workflow_json = extract_json_from_string(workflow_raw)
+        if not workflow_json:
+            self.workflow_step_finished.emit("planning", False,
+                                             "Error: The planner failed to generate a valid workflow.")
+            self.error_signal.emit("Aborting due to planning failure.")
             return
         try:
-            plan = json.loads(plan_json_str)
-            if not isinstance(plan, list) or not plan:
-                self.emit_error("抱歉，我无法为您的请求制定计划。")
-                return
+            workflow = json.loads(workflow_json)
+            self.workflow_step_finished.emit("planning", True, f"执行方案制定完成，共 {len(workflow)} 步")
         except json.JSONDecodeError:
-            self.emit_error("错误：返回了无效的计划格式。")
+            self.workflow_step_finished.emit("planning", False,
+                                             "Error: The planner generated invalid JSON for the workflow.")
+            self.error_signal.emit("Aborting due to planning failure.")
             return
-        plan_text = "<br>---<br><b>执行计划：</b><br>" + "<br>".join(
-            [f"{item.get('step', i + 1)}. {item.get('description', 'N/A')}" for i, item in enumerate(plan)])
-        self.emit_update(plan_text)
+
         self.execution_context.update({
-            "plan": plan,
-            "results": [],
+            "workflow": workflow,
+            "outputs": {},
             "current_step_index": 0
         })
         self.execute_next_step()
 
     def execute_next_step(self):
+        """执行工作流中的下一步"""
         ctx = self.execution_context
-        if ctx["current_step_index"] >= len(ctx["plan"]):
-            self.emit_finished("<br>---<br><b>所有任务已完成！</b>")
+        if ctx["current_step_index"] >= len(ctx["workflow"]):
+            self.finished_signal.emit("All tasks have been completed!")
             return
-        current_step = ctx["plan"][ctx["current_step_index"]]
-        update_msg = f"<br>---<br><b>正在执行步骤 {current_step.get('step', '?')}:</b> {current_step.get('description', '...')}"
-        self.emit_update(update_msg)
-        executor_context = {
-            "overall_plan": ctx["plan"],
-            "tool_results": ctx["results"],
-            "current_step_description": current_step.get("description")
-        }
-        # 【注意】执行者也只看到筛选后的工具，这没问题，因为它只需要调用计划中指定的工具
-        # 为保持一致性，我们依然可以只提供筛选后的工具列表
-        selected_tool_names = {step.get("tool") for step in ctx["plan"] if step.get("tool")}
-        filtered_schemas = [
-            schema for schema in self.full_function_schemas
-            if schema.get("name") in selected_tool_names
-        ]
-        filtered_schemas_str = json.dumps(filtered_schemas, ensure_ascii=False, indent=2)
-        topic_with_context = (
-            f"【可用工具】\n"
-            f"{filtered_schemas_str}\n\n"
-            f"【上下文信息】\n"
-            f"{json.dumps(executor_context, ensure_ascii=False, indent=2)}"
-        )
-        self.executor_task.set_topic(topic_with_context)
-        self.executor_task.start()
 
-    @pyqtSlot(str)
-    def handle_executor_result(self, tool_call_json: str):
-        ctx = self.execution_context
-        current_step = ctx["plan"][ctx["current_step_index"]]
-        clean_json_str = extract_json_from_string(tool_call_json)
-        if not clean_json_str:
-            self.emit_error(f"<br>错误：执行者返回了无效的工具调用格式。")
-            return
+        step = ctx["workflow"][ctx["current_step_index"]]
+        tool_name = step.get("tool")
+        description = step.get("description", f"Executing tool: {tool_name}")
+        step_id = step.get("step_id", f"step_{ctx['current_step_index'] + 1}")
+
+        self.workflow_step_started.emit(step_id, description)
+
         try:
-            tool_call = json.loads(clean_json_str)
-            tool_name = tool_call.get("tool")
-            args = tool_call.get("args", {})
-            if tool_name and tool_name in FUNCTION_MAP:
-                func = FUNCTION_MAP[tool_name]
-                result = func(**args)
-                ctx["results"].append({"step": current_step.get("step"), "output": result})
-                status = "成功" if result.get("success") else "失败"
-                message = str(result.get("message", "无返回信息"))
-                result_msg = f"<br>状态: {status}<br>结果: {message}"
-                self.emit_update(result_msg)
+            resolved_args = self._resolve_args(step.get("args", {}), ctx["outputs"])
+
+            if tool_name and tool_name in self.MASTER_FUNCTION_MAP:
+                func = self.MASTER_FUNCTION_MAP[tool_name]
+                result = func(**resolved_args)
+
+                ctx["outputs"][step_id] = result
+                message = str(result.get("message", "No details provided."))
+
                 if result.get("success"):
+                    self.workflow_step_finished.emit(step_id, True, f"{message}")
                     ctx["current_step_index"] += 1
-                    self.execute_next_step()
+                    QTimer.singleShot(100, self.execute_next_step)
                 else:
-                    self.emit_error("<br>---<br><b>任务因步骤失败而中止。</b>")
+                    self.workflow_step_finished.emit(step_id, False, f"{message}")
+                    self.error_signal.emit("任务执行失败，请检查日志")
             else:
-                self.emit_error(f"<br>错误：无法为此步骤生成有效的工具调用或找不到工具 '{tool_name}'。")
+                self.workflow_step_finished.emit(step_id, False, f"Error: Unknown tool '{tool_name}' specified.")
+                self.error_signal.emit(f"Aborting: Unknown tool '{tool_name}'.")
+
         except Exception as e:
-            self.emit_error(f"<br>执行时发生意外错误: {str(e)}")
+            self.workflow_step_finished.emit(step_id, False, f"An unexpected error occurred: {str(e)}")
+            self.error_signal.emit(f"Aborting due to an unexpected error: {str(e)}")
 
-    # --- 封装信号发射的辅助方法 ---
-    def emit_update(self, message: str):
-        self.update_signal.emit(message)
-
-    def emit_finished(self, message: str):
-        self.finished_signal.emit(message)
-
-    def emit_error(self, message: str):
-        self.error_signal.emit(message)
+    def _resolve_args(self, args: dict, outputs: dict) -> dict:
+        # This function remains unchanged, it's correct.
+        resolved_args = {}
+        for key, value in args.items():
+            if isinstance(value, str) and value.startswith("$outputs."):
+                match = re.match(r"\$outputs\.([\w_]+)\.([\w_]+)(?:\[(\d+)\])?", value)
+                if not match: raise ValueError(f"Invalid output reference format: {value}")
+                ref_step_id, ref_key, ref_index = match.groups()
+                if ref_step_id not in outputs: raise ValueError(f"Could not find output for step '{ref_step_id}'.")
+                ref_value = outputs[ref_step_id].get(ref_key)
+                if ref_index is not None:
+                    if not isinstance(ref_value, list): raise ValueError(
+                        f"Attempted to index a non-list result: {ref_key}")
+                    try:
+                        resolved_args[key] = ref_value[int(ref_index)]
+                    except IndexError:
+                        raise ValueError(f"Index out of range for: {value}")
+                else:
+                    resolved_args[key] = ref_value
+            else:
+                resolved_args[key] = value
+        return resolved_args

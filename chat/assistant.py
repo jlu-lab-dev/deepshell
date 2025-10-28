@@ -6,7 +6,6 @@ from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
 from rag.rag_manager import RAGManager
 from mcp.websearch.web_search_manager import WebSearchManager
-from sys_agent.toolkit_sys import get_function_schemas
 
 class Assistant:
     def __init__(self, assistant_type: str, session_id: Optional[str] = None):
@@ -25,12 +24,6 @@ class Assistant:
         self.kb_list = []
         self.prompt_template = assistant_config.get("prompt_template", "You are a helpful assistant.")
         self.model = assistant_config.get("model", "DeepSeek-V3")
-
-        # 动态插入 function_schemas
-        if assistant_type == "sys_agent_function_call" or assistant_type == "sys_agent_explanation":
-            self.prompt_template = self.prompt_template.replace(
-                "{function_schemas}", get_function_schemas()
-            )
 
     def chat(self, messages: list[str]) -> str:
         import logging
