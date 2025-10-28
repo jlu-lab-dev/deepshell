@@ -1,12 +1,12 @@
-import json
+# main_window.py
+
 import logging
 import re
 import datetime
 import PyQt5.sip as sip
 
-from enum import Enum
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG
+from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy, QMenu, QLabel
 
 from ai_audio.audio_task import AudioTask
@@ -15,7 +15,6 @@ from ai_table.gen_table import generate_table
 from ai_table.intro_ui import TableIntroPage
 from ai_table.table_task import TableTask
 from audio_transcription.intro_ui import AudioTranscriptionIntroPage
-from audio_transcription.transcriptionTask import TranscriptionTask
 from ocr.intro_ui import OcrIntroPage
 from ocr.ocr_task import OcrTask
 from meeting.intro_ui import MeetingIntroPage
@@ -28,8 +27,7 @@ from ppt.intro_ui import PPTIntroPage
 from ppt.workflow.ppt_task import PPTTask
 from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 from sys_agent.intro_ui import SysFuncIntro
-from sys_agent.sys_func_call import FUNCTION_MAP
-from sys_agent.sys_agent_task import SysAgentExplanationTask, SysAgentFunctionCallTask
+from sys_agent.agent_controller import AgentController
 from translation.intro_ui import TranslateIntroPage
 from translation.translate_task import TranslateTask
 from translation.translate_detect import TranslateDetect
@@ -37,14 +35,15 @@ from chat.chat_task import ChatTask
 from chat.intro_page import ChatIntroPage
 from speech.voice_recognition import VoiceRecognition
 from speech.speech_task import Speech, SpeechTask
+from ui.utils import AssistantMode, ViewMode
 from utils.intro_ui import DocAnalysisIntroPage
 from utils.open_local_app_task import OpenLocalAppTask
-from utils.workflow.document_task import DocumentTask
 from draw.drawing_task import AiDrawingTask
 from server_check import ServerCheck
 from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
 from ui.button.model_select_button import ModelSelectButton
-from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage ,ThumbnailMessage,ButtonMessage
+from ui.chat.bubble_message import BubbleMessage, MessageType, ThumbnailMessage, ButtonMessage, \
+    WorkflowContainerMessage
 from ui.chat.chat_box import ChatBox
 from ui.page.speech_page import SpeechPage
 from ui.button.function_menu_button import FunctionMenuButton
@@ -55,15 +54,6 @@ from config.config_manager import ConfigManager
 
 
 logging.basicConfig(level=logging.INFO)
-
-
-class AssistantMode(Enum):
-    """
-        会议记录时AI助手为meeting模式，界面切换为meeting box，发送的消息类型MessageType是TEXT
-        其他时候AI助手均为chat模式，界面切换为chat box，发送的消息可能是TEXT、IMAGE、TABLE
-    """
-    CHAT = "chat"
-    MEETING = "meeting"
 
 
 class MainWin(QWidget):
@@ -92,7 +82,7 @@ class MainWin(QWidget):
         # 中间内容栈 Start
         self.contentStackWgt = QStackedWidget()
 
-        self.chat_intro = ChatIntroPage()  # 智能问答，即主界面
+        self.chat_intro = ChatIntroPage()  # 智能助手，即主界面
 
         self.ppt_intro = PPTIntroPage()    # AI PPT
 
@@ -194,7 +184,7 @@ class MainWin(QWidget):
 
         # 功能组件映射
         self.page_mapping = {
-            "智能问答": {
+            "智能助手": {
                 "main": self.chat_intro,
                 "chat": self.chat_box,
                 "bottom": self.input_field
@@ -204,16 +194,16 @@ class MainWin(QWidget):
                 "chat": self.chat_box,
                 "bottom": self.input_field,
             },
-            # "语种翻译": {
-            #     "main": self.translate_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field,
-            # },
-            # "AI 识图": {
-            #     "main": self.ocr_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field
-            # },
+            "语种翻译": {
+                "main": self.translate_intro,
+                "chat": self.chat_box,
+                "bottom": self.input_field,
+            },
+            "AI 识图": {
+                "main": self.ocr_intro,
+                "chat": self.chat_box,
+                "bottom": self.input_field
+            },
             # "文档分析": {
             #     "main": self.doc_analysis_intro,
             #     "chat": self.chat_box,
@@ -222,11 +212,11 @@ class MainWin(QWidget):
             "知识库": {
                 "main": self.knowledge_base_home
             },
-            # "AI 表格": {
-            #     "main": self.table_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field,
-            # },
+            "AI 表格": {
+                "main": self.table_intro,
+                "chat": self.chat_box,
+                "bottom": self.input_field,
+            },
             "会议记录": {
                 "main": self.meeting_intro,
                 "chat": self.chat_box,
@@ -245,11 +235,16 @@ class MainWin(QWidget):
             "语音聊天": {
                 "main": self.speech_page
             },
-            "系统功能": {
-                "main": self.sys_func_intro,
+            # "系统功能": {
+            #     "main": self.sys_func_intro,
+            #     "chat": self.chat_box,
+            #     "bottom": self.input_field,
+            # },
+            "系统功能": {  # only for demo
+                "main": self.chat_intro,
                 "chat": self.chat_box,
-                "bottom": self.input_field,
-            }
+                "bottom": self.input_field
+            },
         }
 
         # mode setting
@@ -257,7 +252,7 @@ class MainWin(QWidget):
         self.current_model = "DeepSeek-V3"
         self.current_input = None    # string
         self.current_bubble_message = None
-        self.current_func = "智能问答"
+        self.current_func = "智能助手"
 
         # knowledge base setting
         self.selected_kb_id_list = []
@@ -303,8 +298,32 @@ class MainWin(QWidget):
         self.timerSend = QTimer(self)
         self.timerSend.timeout.connect(self.listeningToWaiting)  # "聆听中"到"等待中"的自动转换
 
+        # --- Agent Controller Setup ---
+        self.agent_thread = QThread()
+        self.agent_controller = AgentController()
+        self.agent_controller.moveToThread(self.agent_thread)
+
+        # A dictionary to hold references to workflow step widgets
+        self.workflow_step_widgets = {}
+        self.current_workflow_container = None
+
+        # Connect AgentController signals
+        # For simple chats (fallback)
+        self.agent_controller.normal_update_signal.connect(self.update_ai_message)
+        self.agent_controller.normal_finished_signal.connect(self.ai_callback)
+        # For complex workflows
+        self.agent_controller.workflow_step_started.connect(self.handle_workflow_step_started)
+        self.agent_controller.workflow_step_finished.connect(self.handle_workflow_step_finished)
+        self.agent_controller.finished_signal.connect(self.handle_agent_finished)
+        self.agent_controller.error_signal.connect(self.handle_agent_error)
+
+        self.agent_thread.start()
+
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
+        if function_name == "智能助手":  # only for demo
+            function_name = "系统功能"
+
         config = self.page_mapping.get(function_name)
         if function_name != "知识库":
             self.parent().change_title_midlabel(function_name)
@@ -376,7 +395,7 @@ class MainWin(QWidget):
             self.input_field.set_send_button_status(True)
 
         match function_name:
-            case "智能问答":
+            case "智能助手":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = ChatTask()
             case "AI PPT":
@@ -384,21 +403,18 @@ class MainWin(QWidget):
                 self.sendTask = PPTTask()
                 self.pgen = PPTGenerator()
                 self.pgen.pptgen_complete_signal.connect(self.handle_gen_ppt)
-            case "系统功能":
+            case "AI 表格":
                 self.mode = AssistantMode.CHAT
-                self.sendTask = SysAgentExplanationTask()
-            # case "AI 表格":
-            #     self.mode = AssistantMode.CHAT
-            #     self.sendTask = TableTask()
-            # case "AI 识图":
-            #     self.mode = AssistantMode.CHAT
-            #     self.sendTask = OcrTask()
+                self.sendTask = TableTask()
+            case "AI 识图":
+                self.mode = AssistantMode.CHAT
+                self.sendTask = OcrTask()
             case "会议记录":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = AudioTask()
-            # case "语种翻译":
-            #     self.mode = AssistantMode.CHAT
-            #     self.sendTask = TranslateTask()
+            case "语种翻译":
+                self.mode = AssistantMode.CHAT
+                self.sendTask = TranslateTask()
             case "思维导图":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = MapTask()
@@ -408,6 +424,9 @@ class MainWin(QWidget):
             # case "文档分析":
             #     self.mode = AssistantMode.CHAT
             #     self.sendTask = DocumentTask()
+            case _:  # 【增加一个默认case】
+                if not hasattr(self, 'sendTask') or not isinstance(self.sendTask, ChatTask):
+                    self.sendTask = ChatTask()
         self.sendTask.assistant.set_selected_kb(self.selected_kb_id_list)
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
@@ -512,18 +531,51 @@ class MainWin(QWidget):
                 self.chat_box.add_message_item(bubble_message)
                 bubble_message.button.clicked.connect(lambda: self.pgen.markdown_to_json(result))
 
-        if self.current_func == "系统功能":
-            # 如果还没有加载动画气泡，则添加
-            result_bubble = BubbleMessage(f'正在拆解为子任务链...', '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
-            self.chat_box.add_message_item(result_bubble)
-            self.tool_result = []
-            self.chain_step = 1
-            self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
-
         # 重置当前BubbleMessage引用
         self.current_bubble_message = None
         # 启用发送按钮
         self.input_field.set_send_button_status(True)
+
+    def handle_workflow_step_started(self, step_id: str, text: str):
+        """Handles the start of a workflow step."""
+        self.show_waiting_message(False)
+
+        # 如果当前没有容器，说明这是工作流的第一步
+        if self.current_workflow_container is None:
+            # 创建一个新的容器并添加到聊天框
+            self.current_workflow_container = WorkflowContainerMessage()
+            self.chat_box.add_message_item(self.current_workflow_container)
+
+        # 在当前容器中添加一个新的步骤
+        step_widget = self.current_workflow_container.add_step(text)
+
+        # 存储这个步骤的引用，以便后续更新
+        self.workflow_step_widgets[step_id] = step_widget
+
+    def handle_workflow_step_finished(self, step_id: str, success: bool, message: str):
+        """Finds an existing step widget and updates it to its 'finished' state."""
+        step_widget = self.workflow_step_widgets.get(step_id)
+        if step_widget:
+            step_widget.set_finished(success, message)
+        else:
+            # Fallback in case the 'start' signal was missed
+            print(f"Warning: Could not find a widget for step_id '{step_id}' to update.")
+            final_message = f"[{'SUCCESS' if success else 'FAIL'}] {message}"
+            # You could add a simple text bubble here as a fallback if you want
+            # self.add_bubble_message(final_message, user_send=False)
+
+    def handle_agent_finished(self, final_message):
+        """Receives Agent successful completion signal."""
+        self.input_field.set_send_button_status(True)
+        self.current_workflow_container = None  # 重置容器
+        # self.add_bubble_message(f"<b>✅ {final_message}</b>", user_send=False)
+
+    def handle_agent_error(self, error_message):
+        """Receives Agent error signal."""
+        self.show_waiting_message(False)
+        self.add_bubble_message(f"<b>❌ Workflow Error:</b><br>{error_message}", user_send=False)
+        self.input_field.set_send_button_status(True)
+        self.current_workflow_container = None  # 重置容器
 
     def send_quest_to_ai(self, message):
         self.current_input = message
@@ -531,7 +583,7 @@ class MainWin(QWidget):
         if self.serverCheck.internet_status():
             # Speech.short_text_play("好的，请稍等")
             if self.current_func == "语种翻译":
-                if self.input_field.language_layout.itemAt(0).widget().current_language == "自动检测":
+                if self.input_field.language_layout.itemAt(0).widget().current_language == "自动":
                     detected_lang = TranslateDetect.detect_language(message)
                     self.input_field.language_layout.itemAt(0).widget().set_current_language(detected_lang)
                 message = message+"[END]把用户输入翻译成"+self.input_field.language_layout.itemAt(2).widget().current_language
@@ -545,16 +597,25 @@ class MainWin(QWidget):
             self.speech_page.updateStatus('休眠中')
 
     def handle_send_message(self, user_input, full_message, thumbnail_list):
-        # 判断当前页面如果是gui就跳转聊天
         self.add_bubble_message(user_input, True, thumbnail_list=thumbnail_list)
 
-        if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:  # AI模型检索
-            if self.contentStackWgt.currentWidget() != self.chat_box:
-                self.contentStackWgt.setCurrentWidget(self.chat_box)
+        if self.contentStackWgt.currentWidget() != self.chat_box:
+            self.contentStackWgt.setCurrentWidget(self.chat_box)
+
+        if self.current_func == "系统功能":
+            # Show a generic waiting message immediately for better user feedback
+            self.show_waiting_message(True)
+            # Start the agent controller workflow
+            QMetaObject.invokeMethod(self.agent_controller, "start_workflow", Qt.QueuedConnection,
+                                     Q_ARG(str, full_message))
+            return
+
+        # For all other functions, maintain the original logic
+        if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:
             self.send_quest_to_ai(full_message)
-        elif self.mode == AssistantMode.PAINT:  # 文字绘图
+        elif self.mode == AssistantMode.PAINT:
             self.send_paint_to_ai(full_message)
-        else:  # 会议纪要
+        else:
             self.add_bubble_message("会议纪要暂未实现", False)
 
     def handle_send_voice_message(self, message):
@@ -574,7 +635,7 @@ class MainWin(QWidget):
 
     def add_bubble_message(self, message, user_send, thumbnail_list=None):
         self.chat_box.scrollArea.reset_auto_scroll()
-        if len(thumbnail_list) > 0:
+        if thumbnail_list is not None and len(thumbnail_list) > 0:
             for thumbnail in thumbnail_list:
                 thumbnail_message = ThumbnailMessage(user_send=user_send,thumbnail = thumbnail)
                 self.chat_box.add_message_item(thumbnail_message)
@@ -598,6 +659,9 @@ class MainWin(QWidget):
         self.sendTask.update_signal.connect(self.update_ai_message)
 
         # 重置界面
+        self.workflow_step_widgets.clear()
+        self.current_workflow_container = None
+
         self.chat_box.clearLayout()
         self.input_field.show()
         self.chat_intro.show()
@@ -622,79 +686,6 @@ class MainWin(QWidget):
 
     # Send End
 
-    # system agent function calling chain START
-    def start_function_call_chain(self, user_input, tool_result, result_bubble):
-        content = user_input + "\n工具调用结果：" + "\n".join(
-            f"{json.dumps(item, ensure_ascii=False)}" for item in tool_result
-        ) if len(tool_result) > 0 else user_input
-        logging.info(content)
-        self.function_call_task = SysAgentFunctionCallTask()
-        self.function_call_task.update_signal.connect(self.update_function_calling_chain)
-        self.function_call_task.complete_signal.connect(lambda message: self.function_calling_chain_callback(message, result_bubble))
-        self.function_call_task.set_topic(content)
-        self.function_call_task.start()
-
-    def update_function_calling_chain(self, message):
-        """function_call_task输出调用工具链的进度"""
-        self.input_field.set_send_button_status(False)
-
-    def function_calling_chain_callback(self, message, result_bubble):
-        """调用工具链生成完毕"""        
-        actions = json.loads(message.strip())
-        if isinstance(actions, dict):  # 单步
-            actions = [actions]
-        logging.info(actions)
-        try:
-            need_more_tool = False
-            for action in actions:
-                tool_name = action.get("tool")
-                args = action.get("args", {})
-                need_more_tool |= action.get("need_more_tool", False)
-
-                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + f"正在执行第{self.chain_step}个子任务...")
-                if tool_name and tool_name in FUNCTION_MAP:
-                    func = FUNCTION_MAP[tool_name]
-                    result = func(**args)
-                    # 将tool_name字段放到字典最前面
-                    from collections import OrderedDict
-                    result = OrderedDict([('tool_name', tool_name), *result.items()])
-                    self.tool_result.append(result)
-                    logging.info(result)
-                    if result["success"]:
-                        msg = f'子任务{self.chain_step} 执行【成功】：\n{result["message"]}'
-                    else:
-                        msg = f'执行【失败】：\n{result["message"]}'
-                    if result.get("data") is not None:
-                        data = result["data"]
-                        if isinstance(data, list):
-                            msg += "<br>" + "<br>".join(str(item) for item in data)
-                        elif isinstance(data, dict):
-                            msg += "<br>" + "<br>".join(f"{k}: {v}" for k, v in data.items())
-                        else:
-                            msg += "<br>" + str(data)
-                else:
-                    msg = "执行【失败】：\n无法识别的操作或无效的工具名。"
-                
-                result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
-                self.chain_step += 1
-
-            if need_more_tool:
-                self.start_function_call_chain(self.current_input, self.tool_result, result_bubble)
-            else:
-                result_bubble.message.update_text(result_bubble.message.text() + "<br>" + "操作已全部完成")
-        
-        except Exception as e:
-            msg = f"执行【失败】：\n{str(e)}"
-            result_bubble.message.update_text(result_bubble.message.text() + msg.replace('\n', '<br>'))
-        finally:
-            result_bubble.speech_signal.connect(self.handle_speech)
-            result_bubble.update_button_status(True)
-            
-            self.chat_box.scrollArea.reset_auto_scroll()
-            self.input_field.set_send_button_status(True)
-    
-    # system agent function calling chain END
-
     def set_chat_mode(self):
         print("Chat mode now.")
         self.mode = AssistantMode.CHAT
@@ -709,7 +700,7 @@ class MainWin(QWidget):
 
     def shift2home_page(self):
         self.set_chat_mode()
-        self.handle_function_selection("智能问答")
+        self.handle_function_selection("智能助手")
 
     # Speech Start
     def listeningToWaiting(self):  # 聆听中到等待中的自动转换函数
@@ -957,10 +948,12 @@ class MainWinTitle(QWidget):
 
         self.title_name = QLabel(f"{ConfigManager().app_config['name']}")
         self.title_name.mousePressEvent = lambda event: self.parent().icon_clicked_event()
+        font = QFont("Microsoft YaHei", 16)
+        font.setWeight(QFont.Bold)
+        self.title_name.setFont(font)
         self.title_name.setStyleSheet(
             '''
             color:white;
-            font-size:16px;
             '''
         )
 
@@ -970,25 +963,54 @@ class MainWinTitle(QWidget):
         self.title_layout.addWidget(self.title_name)
         self.title_layout.addItem(QSpacerItem(40, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
-    def switchViewType(self):
-        self.title_layout.setContentsMargins(18, 12, 18, 0)
-        self.setStyleSheet(
-            '''
-            #title{
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-                background:transparent;
-            }
-            '''
-        )
-        self.icon.setFixedSize(24, 24)
-        self.icon.setPixmap(QPixmap(ConfigManager().app_config['logo']))
-        self.icon.setScaledContents(True)
-        self.title_name.setStyleSheet(
-            '''
-            color:white;
-            font-size:16px;
-            font-weight:bold;
-            '''
-        )
-        self.title_layout.setSpacing(10)
+    def switchViewType(self, mode: ViewMode):
+        """根据显示模式调整标题栏外观"""
+        if mode == ViewMode.SIDEBAR:
+            # --- 侧边栏模式：显示自定义标题栏 ---
+            self.show()
+            self.setFixedHeight(self.title_height)
+            self.title_layout.setContentsMargins(18, 12, 18, 0)
+            self.setStyleSheet(
+                '''
+                #title{
+                    border-top-left-radius: 5px;
+                    border-top-right-radius: 5px;
+                    background:transparent;
+                }
+                '''
+            )
+            self.icon.setFixedSize(24, 24)
+            self.icon.setPixmap(QPixmap(ConfigManager().app_config['logo']))
+            self.icon.setScaledContents(True)
+            self.title_name.setStyleSheet(
+                '''
+                color:white;
+                font-size:16px;
+                font-weight:bold;
+                '''
+            )
+            self.title_layout.setSpacing(10)
+        elif mode == ViewMode.WINDOW:
+            self.show()
+            self.setFixedHeight(self.title_height)
+            self.title_layout.setContentsMargins(18, 12, 18, 0)
+            self.setStyleSheet(
+                '''
+                #title{
+                    border-top-left-radius: 5px;
+                    border-top-right-radius: 5px;
+                    background:transparent;
+                }
+                '''
+            )
+            self.icon.setFixedSize(36, 36)
+            self.icon.setPixmap(QPixmap(ConfigManager().app_config['logo']))
+            self.icon.setScaledContents(True)
+            self.title_name.setStyleSheet(
+                '''
+                color:white;
+                font-size:16px;
+                font-weight:bold;
+                '''
+            )
+            self.title_layout.setSpacing(10)

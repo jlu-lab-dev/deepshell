@@ -54,7 +54,7 @@ class SpeechPage(QWidget):
         # Logo动画
         # self.movie = QMovie("ui/icon/AI助手圆脸_动效.gif")
         self.movie_label = QLabel()
-        self.movie_label.setPixmap(QPixmap("ui/icon/DeepShell/icon_app_logo_DeepShell_圆角.png").scaled(124, 124))
+        self.movie_label.setPixmap(QPixmap("ui/icon/DeepShell/shell.png").scaled(124, 124))
         self.movie_label.setStyleSheet("""
                     background: #E6E3E4;
                     border-radius: 24px;
@@ -143,7 +143,7 @@ class SpeechPage(QWidget):
         self.statusLabel.setText(f'当前状态：{self.state}')
         self.statusLabel.repaint()
         
-    def switchViewType(self):
+    def switchViewType(self, mode):
         if PublicTypes.viewType == "sidebar":
             self.statusLabel.setStyleSheet("""  
                         QLabel {  

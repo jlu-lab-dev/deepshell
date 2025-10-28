@@ -45,7 +45,7 @@ class KnowledgeBaseSelectButton(QPushButton):
         self.name_label.setStyleSheet("""
             width: 41px;
             height: 14px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -120,7 +120,7 @@ class KnowledgeBaseSelectButton(QPushButton):
         kb_name.setStyleSheet("""
                         width: 192px;
                         height: 16px;
-                        font-family: Source Han Sans SC;
+                        font-family: Microsoft YaHei;
                         font-weight: 400;
                         font-size: 14px;
                         color: #FFFFFF;

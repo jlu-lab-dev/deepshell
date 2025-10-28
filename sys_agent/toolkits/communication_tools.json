@@ -1,0 +1,30 @@
+[
+  {
+    "name": "get_contact_email",
+    "description": "根据联系人姓名查询其电子邮件地址。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "contact_name": {
+          "type": "string",
+          "description": "要查询的联系人的姓名，例如 '周总'"
+        }
+      },
+      "required": ["contact_name"]
+    }
+  },
+  {
+    "name": "compose_email",
+    "description": "打开用户的默认邮件客户端，创建一个新的邮件草稿，并填好收件人、主题和正文。它还会提示用户手动添加一个附件。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "recipient_email": { "type": "string", "description": "收件人的电子邮件地址" },
+        "subject": { "type": "string", "description": "邮件的主题" },
+        "body": { "type": "string", "description": "邮件的正文内容" },
+        "attachment_path": { "type": "string", "description": "需要作为附件的文件的完整路径" }
+      },
+      "required": ["recipient_email", "subject", "body", "attachment_path"]
+    }
+  }
+]

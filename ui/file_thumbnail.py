@@ -24,9 +24,15 @@ class FileThumbnail(QLabel):
         self.close_button = QPushButton(self)
         self.close_button.setFixedSize(16, 16)
         self.close_button.setStyleSheet("""
-                    background: #FFFFFF;
-                    border-radius: 50%;
-                """)
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 8px;  /* 可保留轻微圆角，保证hover效果 */
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);  /* 悬停时微微变亮 */
+            }
+        """)
         self.close_button.setIcon(QIcon('ui/icon/icon_附件_删除.png'))
         self.close_button.setIconSize(QSize(16, 16))
         self.close_button.clicked.connect(self.delete_self)
@@ -73,22 +79,24 @@ class FileThumbnail(QLabel):
         # 文件信息及布局
         file_name = Path(self.file_path).name if len(Path(self.file_path).name) <= 4 else f"{Path(self.file_path).name[0:4]}..."
         file_name_label = QLabel(file_name)
-        file_name_label.setFixedSize(67, 13)
+        file_name_label.setFixedSize(67, 16)
         file_name_label.setStyleSheet("""
-                                font-family: Source Han Sans SC;
+                                font-family: Microsoft YaHei;
                                 font-weight: 400;
                                 font-size: 14px;
                                 color: #FFFFFF;
+                                border: none;
                             """)
         size_text = f"{Path(self.file_path).suffix.upper().split('.')[1]}，{file_info.size() / 1024:.2f} KB"
         size_text = size_text if len(size_text) <= 9 else f"{size_text[0:7]}..."
         file_size_label = QLabel(size_text)
         file_size_label.setFixedSize(71, 14)
         file_size_label.setStyleSheet("""
-                                font-family: Source Han Sans SC;
+                                font-family: Microsoft YaHei;
                                 font-weight: 400;
                                 font-size: 14px;
                                 color: #B3B3B3;
+                                border: none;
                             """)
 
         info_layout = QVBoxLayout()
@@ -138,6 +146,12 @@ class HorizontalThumbnailScrollArea(QScrollArea):
         self.close_btn_visible = close_btn_visible
         self.thumbnail_clickable = thumbnail_clickable
 
+        self.theme_colors = {
+            'bg': '#2b2b2b',  # 深色主题背景
+            'border': '#3c3c3c',
+            'scrollbar_bg': '#2b2b2b',
+            'scrollbar_handle': '#555555'
+        }
         self.init_ui()
 
         self.thumbnail_list = []
@@ -150,41 +164,59 @@ class HorizontalThumbnailScrollArea(QScrollArea):
 
     def init_ui(self):
         self.setFixedHeight(72)
-        self.setStyleSheet("""
-            QScrollBar:horizontal {
+        self.setStyleSheet(f"""
+            QScrollArea {{
+                background: {self.theme_colors['bg']};
+                border: 1px solid {self.theme_colors['border']};
+                border-radius: 8px;
+            }}
+            QScrollBar:horizontal {{
                 border: none;
-                background: #F0F0F0;  /* 滚动条轨道颜色 */
-                height: 6px;         /* 水平滚动条高度 */
+                background: {self.theme_colors['scrollbar_bg']};
+                height: 6px;
                 margin: 0px;
-            }
-
-            QScrollBar::handle:horizontal {
-                background: #C0C0C0;  /* 滚动条滑块颜色 */
-                min-width: 30px;     /* 滑块最小宽度 */
-                border-radius: 3px;  /* 圆角 */
-            }
-
-            QScrollBar::add-line:horizontal, 
-            QScrollBar::sub-line:horizontal {
-                background: none;    /* 隐藏两端按钮 */
-                width: 0px;
-            }
-
-            QScrollBar:vertical {
-                display: none;       /* 完全隐藏垂直滚动条 */
-            }
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {self.theme_colors['scrollbar_handle']};
+                min-width: 30px;
+                border-radius: 3px;
+            }}
         """)
         self.setWidgetResizable(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         self.scroll_content = QWidget()
+        self.scroll_content.setStyleSheet(f"background: {self.theme_colors['bg']};")
         self.scroll_content.setFixedHeight(72)
         self.thumbnail_layout = QHBoxLayout(self.scroll_content)
         self.thumbnail_layout.setSpacing(6)
         self.thumbnail_layout.setContentsMargins(6, 0, 6, 0)
-        self.thumbnail_layout.setAlignment(Qt.AlignLeft)  # 确保图片从左对齐
+        self.thumbnail_layout.setAlignment(Qt.AlignLeft)
         self.setWidget(self.scroll_content)
+
+    def apply_theme(self, colors):
+        """允许外部主题同步"""
+        self.theme_colors = colors
+        self.setStyleSheet(f"""
+            QScrollArea {{
+                background: {colors['input_bg']};
+                border: 1px solid {colors['input_border']};
+                border-radius: 8px;
+            }}
+            QScrollBar:horizontal {{
+                border: none;
+                background: {colors['scrollbar_bg']};
+                height: 6px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {colors['scrollbar_handle']};
+                min-width: 30px;
+                border-radius: 3px;
+            }}
+        """)
+        self.scroll_content.setStyleSheet(f"background: {colors['input_bg']};")
 
     def add_thumbnail(self, file_path):
         thumbnail = FileThumbnail(file_path)

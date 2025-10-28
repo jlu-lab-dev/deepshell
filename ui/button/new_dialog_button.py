@@ -37,7 +37,7 @@ class NewDialogButton(QPushButton):
         self.name_label.setStyleSheet("""
                     width: 56px;
                     height: 14px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #FFFFFF;

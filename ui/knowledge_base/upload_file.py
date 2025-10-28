@@ -72,7 +72,7 @@ class UploadDialog(QDialog):
         title_label = QLabel("上传文件")
         title_label.setStyleSheet("""
             QLabel {
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-size: 14px;
                 color: #333333;
                 border-left:none;
@@ -154,14 +154,14 @@ class UploadDialog(QDialog):
         # 样式设置
         icon.setStyleSheet("border:none;")
         text1.setStyleSheet("""
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-size: 16px;
             color: #666666;
             margin-top: 15px;
             border:none;
         """)
         text2.setStyleSheet("""
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-size: 14px;
             color: #999999;
             margin-top: 8px;
@@ -185,7 +185,7 @@ class UploadDialog(QDialog):
                         border: 1px solid #CCCCCC;
                         border-radius: 6px;
                         color: #666666;
-                        font-family: Source Han Sans SC;
+                        font-family: Microsoft YaHei;
                         font-size: 14px;
                     }
                     QPushButton:hover {
@@ -201,7 +201,7 @@ class UploadDialog(QDialog):
                         background: #007AFF;
                         border-radius: 6px;
                         color: #FFFFFF;
-                        font-family: Source Han Sans SC;
+                        font-family: Microsoft YaHei;
                         font-size: 14px;
                     }
                     QPushButton:hover {
@@ -218,7 +218,7 @@ class UploadDialog(QDialog):
         self.tips_label = QLabel("点击或拖拽文件或文件夹至此区域继续上传")
         self.tips_label.setStyleSheet("""
                     QLabel {
-                        font-family: Source Han Sans SC;
+                        font-family: Microsoft YaHei;
                         font-size: 14px;
                         color: #999999;
                         margin-top: 8px;

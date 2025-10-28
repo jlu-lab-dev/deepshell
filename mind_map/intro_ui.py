@@ -1,5 +1,5 @@
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QPainter, QPainterPath
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QSpacerItem, QSizePolicy
 
 
@@ -12,21 +12,32 @@ class MindMapIntroPage(QWidget):
         # logo
         self.logo_label = QLabel()
         self.logo_label.setFixedSize(96, 96)
-        self.logo_label.setStyleSheet("""
-                    QLabel {
-                        background: #E6E3E4;
-                        border-radius: 24px;
-                    }
-                """)
 
-        pixmap = QPixmap("ui/icon/DeepShell/icon_DeepShell_思维导图.png")
-        self.logo_label.setPixmap(pixmap.scaled(124, 124, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        # 加载并缩放图像
+        pixmap = QPixmap("ui/icon/DeepShell/icon_DeepShell_思维导图.png").scaled(
+            96, 96, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+        )
+
+        # 创建圆角遮罩
+        rounded = QPixmap(96, 96)
+        rounded.fill(Qt.transparent)
+
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, 96, 96, 12, 12)  # 圆角半径 = 24px
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+
+        # 设置结果
+        self.logo_label.setPixmap(rounded)
         self.logo_label.setAlignment(Qt.AlignCenter)
 
         # 介绍文字
         self.welcome_label = QLabel("思维导图")
         self.welcome_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 20px;
                     color: #FFFEFE;
@@ -38,7 +49,7 @@ class MindMapIntroPage(QWidget):
 
         self.intro_label = QLabel("AI生成思维导图功能可以快速将复杂的信息进行结构化梳理，基于强大的语言理解能力，自动识别信息之间的逻辑关系，构建出层次分明、逻辑清晰的思维导图。")
         self.intro_label.setStyleSheet("""
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-weight: 400;
                     font-size: 14px;
                     color: #B3B3B3;

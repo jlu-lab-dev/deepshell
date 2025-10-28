@@ -210,6 +210,7 @@ class InputField(QFrame):
                 background: {colors.get('button_pressed', colors['button_bg'])};
             }}
         """
+        self.thumbnail_scroll_area.apply_theme(colors)
         self.zoom_button.setStyleSheet(button_style)
         self.microphone_button.setStyleSheet(button_style)
         self.upload_file_button.setStyleSheet(button_style)

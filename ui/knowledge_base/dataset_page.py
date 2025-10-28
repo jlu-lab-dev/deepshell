@@ -187,7 +187,7 @@ class DatasetPage(QWidget):
         # 大标题：数据集
         titleLabel = QLabel("数据集")
         titleLabel.setStyleSheet("""
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 28px;
             color: #333333;
@@ -198,7 +198,7 @@ class DatasetPage(QWidget):
         # 说明文字
         infoLabel = QLabel("解析成功后才能问答哦")
         infoLabel.setStyleSheet("""
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-size: 14px;
             color: #999999;
             border:none
@@ -268,7 +268,7 @@ class DatasetPage(QWidget):
                 {   background: #007AFF;
                     border: none;
                     border-radius: 8px;
-                    font-family: Source Han Sans SC;
+                    font-family: Microsoft YaHei;
                     font-size: 14px;
                     color: #FFFFFF;
                 }
@@ -292,7 +292,7 @@ class DatasetPage(QWidget):
             QTableWidget {
                 background: #FFFFFF;
                 border: none;
-                font-family: Source Han Sans SC;
+                font-family: Microsoft YaHei;
                 font-size: 14px;
                 color: #333333;
             }

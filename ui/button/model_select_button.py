@@ -52,7 +52,7 @@ class ModelSelectButton(QPushButton):
         self.name_label.setStyleSheet("""
             width: 87px;
             height: 16px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
@@ -104,7 +104,7 @@ class ModelSelectButton(QPushButton):
         name_label.setStyleSheet("""
             width: 87px;
             height: 16px;
-            font-family: Source Han Sans SC;
+            font-family: Microsoft YaHei;
             font-weight: 400;
             font-size: 14px;
             color: #FFFFFF;
