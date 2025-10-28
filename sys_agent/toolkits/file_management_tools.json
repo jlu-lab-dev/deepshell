@@ -248,7 +248,7 @@
     "parameters": {
       "type": "object",
       "properties": {
-        "directory": { "type": "string", "description": "文件要保存到的目录路径" },
+        "directory": { "type": "string", "description": "文件要保存到的目录路径，推荐用户目录下的桌面目录" },
         "filename": { "type": "string", "description": "Word 文档的文件名 (带或不带.docx后缀)" },
         "content": { "type": "string", "description": "要写入文件的文本内容" }
       },
