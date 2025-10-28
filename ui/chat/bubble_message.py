@@ -320,6 +320,7 @@ class WorkflowStepMessage(QWidget):
 
         # 状态文本 - 这部分不变
         self.text_label = QLabel(text, self)
+        self.text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.text_label.setWordWrap(True)
         self.text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         font = QFont('Microsoft YaHei', 12)

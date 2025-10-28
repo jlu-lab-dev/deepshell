@@ -12,6 +12,18 @@
     "tools_implementation_module": "sys_agent.toolkits.browser_tools"
   },
   {
+    "name": "data_analysis_expert",
+    "description": "负责处理和分析结构化数据，例如从表格数据中提取见解、生成摘要或报告。",
+    "tools_definition_file": "toolkits/data_analysis_tools.json",
+    "tools_implementation_module": "sys_agent.toolkits.data_analysis_tools"
+  },
+  {
+    "name": "communication_expert",
+    "description": "负责通讯任务，例如发送电子邮件、查询联系人信息。",
+    "tools_definition_file": "toolkits/communication_tools.json",
+    "tools_implementation_module": "sys_agent.toolkits.communication_tools"
+  },
+  {
     "name": "system_expert",
     "description": "负责与操作系统相关的操作，如打开控制面板、打开蓝牙设置。",
     "tools_definition_file": "toolkits/system_tools.json",

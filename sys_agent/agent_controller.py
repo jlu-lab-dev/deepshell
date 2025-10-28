@@ -188,7 +188,7 @@ class AgentController(QObject):
                 if schema["name"] == name:
                     final_tool_schemas.append(schema)
                     break
-
+        self.workflow_step_finished.emit("available_tools", True, f"共收集到 {len(all_defined_tools)} 个可用工具…")
         topic = (f"【项目可用工具集】\n{json.dumps(final_tool_schemas, ensure_ascii=False, indent=2)}\n\n"
                  f"【用户原始请求】\n{ctx['user_input']}")
         self.planner_task.set_topic(topic)
@@ -244,11 +244,11 @@ class AgentController(QObject):
                 message = str(result.get("message", "No details provided."))
 
                 if result.get("success"):
-                    self.workflow_step_finished.emit(step_id, True, f"Success: {message}")
+                    self.workflow_step_finished.emit(step_id, True, f"{message}")
                     ctx["current_step_index"] += 1
                     QTimer.singleShot(100, self.execute_next_step)
                 else:
-                    self.workflow_step_finished.emit(step_id, False, f"Failed: {message}")
+                    self.workflow_step_finished.emit(step_id, False, f"{message}")
                     self.error_signal.emit("任务执行失败，请检查日志")
             else:
                 self.workflow_step_finished.emit(step_id, False, f"Error: Unknown tool '{tool_name}' specified.")

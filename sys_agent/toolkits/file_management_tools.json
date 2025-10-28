@@ -1,5 +1,19 @@
 [
   {
+    "name": "get_user_folder_path",
+    "description": "获取当前用户特定标准文件夹（如 'Downloads', 'Documents', 'Desktop'）的完整路径。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "folder_name": {
+          "type": "string",
+          "description": "标准文件夹的名称，例如 'Downloads'"
+        }
+      },
+      "required": ["folder_name"]
+    }
+  },
+  {
     "name": "open_file",
     "description": "打开指定路径的文件",
     "parameters": {
@@ -201,6 +215,53 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "一个包含所有找到的文件完整路径的列表。"
+        }
+      }
+    }
+  },
+  {
+    "name": "read_table_data",
+    "description": "读取指定路径的表格文件（如 .csv, .xlsx）的内容，并将其作为结构化数据返回。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "要读取的表格文件的路径"
+        }
+      },
+      "required": ["path"]
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "table_data": {
+          "type": "array",
+          "description": "从表格中读取并转换为JSON格式的数据列表。"
+        }
+      }
+    }
+  },
+  {
+    "name": "save_text_as_word_doc",
+    "description": "将一段文本内容保存到指定目录下的一个 Word (.docx) 文件中。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "directory": { "type": "string", "description": "文件要保存到的目录路径" },
+        "filename": { "type": "string", "description": "Word 文档的文件名 (带或不带.docx后缀)" },
+        "content": { "type": "string", "description": "要写入文件的文本内容" }
+      },
+      "required": ["directory", "filename", "content"]
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "file_path": {
+          "type": "string",
+          "description": "Word文件的完整路径。"
         }
       }
     }
