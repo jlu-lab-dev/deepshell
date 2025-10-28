@@ -81,7 +81,7 @@ class MeetingWidget(QWidget):
             self.layout0.addItem(QSpacerItem(10, 100, QSizePolicy.Preferred, QSizePolicy.Expanding))
             self.spacerItemAdded = True
 
-    def switchViewType(self):
+    def switchViewType(self, mode):
         if PublicTypes.viewType == "sidebar":
             h = self.height - 280
             self.setFixedHeight(h)

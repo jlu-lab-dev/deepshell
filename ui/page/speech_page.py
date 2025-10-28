@@ -143,7 +143,7 @@ class SpeechPage(QWidget):
         self.statusLabel.setText(f'当前状态：{self.state}')
         self.statusLabel.repaint()
         
-    def switchViewType(self):
+    def switchViewType(self, mode):
         if PublicTypes.viewType == "sidebar":
             self.statusLabel.setStyleSheet("""  
                         QLabel {  

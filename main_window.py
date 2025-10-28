@@ -5,7 +5,6 @@ import re
 import datetime
 import PyQt5.sip as sip
 
-from enum import Enum
 from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy, QMenu, QLabel
@@ -16,7 +15,6 @@ from ai_table.gen_table import generate_table
 from ai_table.intro_ui import TableIntroPage
 from ai_table.table_task import TableTask
 from audio_transcription.intro_ui import AudioTranscriptionIntroPage
-from audio_transcription.transcriptionTask import TranscriptionTask
 from ocr.intro_ui import OcrIntroPage
 from ocr.ocr_task import OcrTask
 from meeting.intro_ui import MeetingIntroPage
@@ -37,15 +35,15 @@ from chat.chat_task import ChatTask
 from chat.intro_page import ChatIntroPage
 from speech.voice_recognition import VoiceRecognition
 from speech.speech_task import Speech, SpeechTask
+from ui.utils import AssistantMode, ViewMode
 from utils.intro_ui import DocAnalysisIntroPage
 from utils.open_local_app_task import OpenLocalAppTask
-from utils.workflow.document_task import DocumentTask
 from draw.drawing_task import AiDrawingTask
 from server_check import ServerCheck
 from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
 from ui.button.model_select_button import ModelSelectButton
-from ui.chat.bubble_message import BubbleMessage, MessageType, TextMessage, ThumbnailMessage, ButtonMessage, \
-    WorkflowStepMessage, WorkflowContainerMessage
+from ui.chat.bubble_message import BubbleMessage, MessageType, ThumbnailMessage, ButtonMessage, \
+    WorkflowContainerMessage
 from ui.chat.chat_box import ChatBox
 from ui.page.speech_page import SpeechPage
 from ui.button.function_menu_button import FunctionMenuButton
@@ -56,15 +54,6 @@ from config.config_manager import ConfigManager
 
 
 logging.basicConfig(level=logging.INFO)
-
-
-class AssistantMode(Enum):
-    """
-        会议记录时AI助手为meeting模式，界面切换为meeting box，发送的消息类型MessageType是TEXT
-        其他时候AI助手均为chat模式，界面切换为chat box，发送的消息可能是TEXT、IMAGE、TABLE
-    """
-    CHAT = "chat"
-    MEETING = "meeting"
 
 
 class MainWin(QWidget):
@@ -974,25 +963,54 @@ class MainWinTitle(QWidget):
         self.title_layout.addWidget(self.title_name)
         self.title_layout.addItem(QSpacerItem(40, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
-    def switchViewType(self):
-        self.title_layout.setContentsMargins(18, 12, 18, 0)
-        self.setStyleSheet(
-            '''
-            #title{
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-                background:transparent;
-            }
-            '''
-        )
-        self.icon.setFixedSize(24, 24)
-        self.icon.setPixmap(QPixmap(ConfigManager().app_config['logo']))
-        self.icon.setScaledContents(True)
-        self.title_name.setStyleSheet(
-            '''
-            color:white;
-            font-size:16px;
-            font-weight:bold;
-            '''
-        )
-        self.title_layout.setSpacing(10)
+    def switchViewType(self, mode: ViewMode):
+        """根据显示模式调整标题栏外观"""
+        if mode == ViewMode.SIDEBAR:
+            # --- 侧边栏模式：显示自定义标题栏 ---
+            self.show()
+            self.setFixedHeight(self.title_height)
+            self.title_layout.setContentsMargins(18, 12, 18, 0)
+            self.setStyleSheet(
+                '''
+                #title{
+                    border-top-left-radius: 5px;
+                    border-top-right-radius: 5px;
+                    background:transparent;
+                }
+                '''
+            )
+            self.icon.setFixedSize(24, 24)
+            self.icon.setPixmap(QPixmap(ConfigManager().app_config['logo']))
+            self.icon.setScaledContents(True)
+            self.title_name.setStyleSheet(
+                '''
+                color:white;
+                font-size:16px;
+                font-weight:bold;
+                '''
+            )
+            self.title_layout.setSpacing(10)
+        elif mode == ViewMode.WINDOW:
+            self.show()
+            self.setFixedHeight(self.title_height)
+            self.title_layout.setContentsMargins(18, 12, 18, 0)
+            self.setStyleSheet(
+                '''
+                #title{
+                    border-top-left-radius: 5px;
+                    border-top-right-radius: 5px;
+                    background:transparent;
+                }
+                '''
+            )
+            self.icon.setFixedSize(36, 36)
+            self.icon.setPixmap(QPixmap(ConfigManager().app_config['logo']))
+            self.icon.setScaledContents(True)
+            self.title_name.setStyleSheet(
+                '''
+                color:white;
+                font-size:16px;
+                font-weight:bold;
+                '''
+            )
+            self.title_layout.setSpacing(10)
