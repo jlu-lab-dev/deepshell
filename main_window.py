@@ -1,4 +1,5 @@
-import json
+# main_window.py
+
 import logging
 import re
 import datetime

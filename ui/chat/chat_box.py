@@ -1,3 +1,5 @@
+# chat_box.py
+
 from PyQt5.QtCore import pyqtSignal, Qt, QEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSpacerItem, QSizePolicy, QScrollBar, QScrollArea
 
