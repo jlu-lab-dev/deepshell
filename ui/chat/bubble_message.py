@@ -51,7 +51,6 @@ class TextMessage(QLabel):
         html_text = markdown.markdown(self.msg_text)
         self.setText(html_text)
         self.setAlignment(Qt.AlignLeft)
-
         self.apply_theme()
 
         self.font_metrics = QFontMetrics(QFont('微软雅黑', 12))

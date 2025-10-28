@@ -147,12 +147,11 @@ class MainWin(QWidget):
         self.function_menu_btn.function_selected.connect(self.handle_function_selection)
 
         hor_layout = QHBoxLayout()
+        hor_layout.setSpacing(12)  # 设置按钮间距
         hor_layout.addWidget(self.new_dialog_btn)
-        hor_layout.addStretch()
         hor_layout.addWidget(self.knowledge_base_select_btn)
-        hor_layout.addStretch()
         hor_layout.addWidget(self.model_select_btn)
-        hor_layout.addStretch()
+        hor_layout.addStretch()  # 只在右边留空白
         hor_layout.addWidget(self.function_menu_btn)
         # 功能按钮 End
 
@@ -601,6 +600,8 @@ class MainWin(QWidget):
 
         if self.contentStackWgt.currentWidget() != self.chat_box:
             self.contentStackWgt.setCurrentWidget(self.chat_box)
+            # 当有对话时，隐藏背景logo
+            self.chat_intro.hide()
 
         if self.current_func == "系统功能":
             # Show a generic waiting message immediately for better user feedback
@@ -625,6 +626,11 @@ class MainWin(QWidget):
             return
 
         self.add_bubble_message(message, True)
+        
+        # 当有对话时，切换到聊天框并隐藏背景logo
+        if self.contentStackWgt.currentWidget() != self.chat_box:
+            self.contentStackWgt.setCurrentWidget(self.chat_box)
+            self.chat_intro.hide()
 
         if self.mode == AssistantMode.CHAT or self.mode == AssistantMode.MEETING:
             self.send_quest_to_ai(message)  # AI模型检索

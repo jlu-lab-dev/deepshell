@@ -25,6 +25,8 @@ class ShadowWindow(QWidget):
         self.empty_icon = QIcon()
         self.theme_manager = ThemeManager()
         self.current_view_mode = None
+        
+        self.fullscreen_window = None
 
         self.grip_size = 8
         self._is_resizing = False
@@ -40,6 +42,9 @@ class ShadowWindow(QWidget):
         self.init_ui()
         self._is_drag = False
         self.move_DragPosition = QPoint()
+        
+        # 连接主题切换信号
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
         self.mainwin.handle_function_selection("智能助手")
@@ -102,8 +107,8 @@ class ShadowWindow(QWidget):
         self.action_sidebar = QAction("侧边栏模式")
         self.action_sidebar.triggered.connect(lambda: self.switch_view_mode(ViewMode.SIDEBAR))
         sub_menu.addAction(self.action_sidebar)
-        self.action_window = QAction("窗口模式")
-        self.action_window.triggered.connect(lambda: self.switch_view_mode(ViewMode.WINDOW))
+        self.action_window = QAction("大屏模式")
+        self.action_window.triggered.connect(lambda: self.switch_to_fullscreen())
         sub_menu.addAction(self.action_window)
         menu.sub_menu = sub_menu
         menu.setSubMenu()
@@ -152,6 +157,34 @@ class ShadowWindow(QWidget):
         self.configPage = ApiKeyConfigPage(self)
 
         self.switch_view_mode(ViewMode.SIDEBAR)
+    
+    def switch_to_fullscreen(self):
+        """切换到大屏模式（FullScreenWindow）"""
+        # 懒加载 FullScreenWindow
+        if self.fullscreen_window is None:
+            from fullscreen_window import FullScreenWindow
+            self.fullscreen_window = FullScreenWindow()
+            # 连接大屏窗口的切换回侧边栏的信号
+            self.fullscreen_window.switch_to_sidebar = self.switch_from_fullscreen_to_sidebar
+        
+        # 隐藏当前的shadow window
+        self.hide()
+        
+        # 显示fullscreen window
+        self.fullscreen_window.show()
+        self.fullscreen_window.raise_()
+        self.fullscreen_window.activateWindow()
+    
+    def switch_from_fullscreen_to_sidebar(self):
+        """从大屏模式切换回侧边栏模式"""
+        if self.fullscreen_window:
+            self.fullscreen_window.hide()
+        
+        # 确保切换到侧边栏模式
+        self.switch_view_mode(ViewMode.SIDEBAR)
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     # MODIFIED: 整个函数被重构以正确处理尺寸限制
     def switch_view_mode(self, mode: ViewMode):

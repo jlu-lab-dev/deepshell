@@ -14,7 +14,6 @@ class ChatScrollBar(QScrollBar):
         self.theme_manager = ThemeManager()
         self.apply_theme()
         self.theme_manager.theme_changed.connect(self.apply_theme)
-
     def apply_theme(self, theme_name=None):
         colors = self.theme_manager.get_colors()
         self.setStyleSheet(f'''
@@ -102,6 +101,9 @@ class ChatBox(QWidget):
         self.theme_manager = ThemeManager()
         self.init_ui()
         self.spacerItemAdded = False
+        
+        # 连接主题切换信号
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
