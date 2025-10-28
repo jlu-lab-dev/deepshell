@@ -24,9 +24,15 @@ class FileThumbnail(QLabel):
         self.close_button = QPushButton(self)
         self.close_button.setFixedSize(16, 16)
         self.close_button.setStyleSheet("""
-                    background: #FFFFFF;
-                    border-radius: 50%;
-                """)
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 8px;  /* 可保留轻微圆角，保证hover效果 */
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.1);  /* 悬停时微微变亮 */
+            }
+        """)
         self.close_button.setIcon(QIcon('ui/icon/icon_附件_删除.png'))
         self.close_button.setIconSize(QSize(16, 16))
         self.close_button.clicked.connect(self.delete_self)
@@ -73,12 +79,13 @@ class FileThumbnail(QLabel):
         # 文件信息及布局
         file_name = Path(self.file_path).name if len(Path(self.file_path).name) <= 4 else f"{Path(self.file_path).name[0:4]}..."
         file_name_label = QLabel(file_name)
-        file_name_label.setFixedSize(67, 13)
+        file_name_label.setFixedSize(67, 16)
         file_name_label.setStyleSheet("""
                                 font-family: Microsoft YaHei;
                                 font-weight: 400;
                                 font-size: 14px;
                                 color: #FFFFFF;
+                                border: none;
                             """)
         size_text = f"{Path(self.file_path).suffix.upper().split('.')[1]}，{file_info.size() / 1024:.2f} KB"
         size_text = size_text if len(size_text) <= 9 else f"{size_text[0:7]}..."
@@ -89,6 +96,7 @@ class FileThumbnail(QLabel):
                                 font-weight: 400;
                                 font-size: 14px;
                                 color: #B3B3B3;
+                                border: none;
                             """)
 
         info_layout = QVBoxLayout()
