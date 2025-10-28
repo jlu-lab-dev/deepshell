@@ -315,6 +315,8 @@ class MainWin(QWidget):
 
         # 连接AgentController的信号到MainWin中的槽
         self.agent_controller.update_signal.connect(self.handle_agent_update)
+        self.agent_controller.normal_update_signal.connect(self.update_ai_message)
+        self.agent_controller.normal_finished_signal.connect(self.ai_callback)
         self.agent_controller.finished_signal.connect(self.handle_agent_finished)
         self.agent_controller.error_signal.connect(self.handle_agent_error)
 

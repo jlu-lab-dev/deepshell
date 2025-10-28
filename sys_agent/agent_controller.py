@@ -1,11 +1,13 @@
 # agent_controller.py
 
 import json
+import logging
 import re
 import os
 import importlib
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, pyqtSlot
 
+from chat.chat_task import ChatTask
 from sys_agent.agent_task import ProjectManagerTask, ExpertToolRecommenderTask, ChiefPlannerTask
 
 
@@ -17,6 +19,8 @@ def extract_json_from_string(text: str) -> str | None:
 
 class AgentController(QObject):
     update_signal = pyqtSignal(str)
+    normal_update_signal = pyqtSignal(str)
+    normal_finished_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
 
@@ -26,11 +30,14 @@ class AgentController(QObject):
         self.pm_task = ProjectManagerTask()
         self.expert_task = ExpertToolRecommenderTask()
         self.planner_task = ChiefPlannerTask()
+        self.fallback_chat_task = ChatTask()
 
         # --- 连接信号 ---
-        self.pm_task.complete_signal.connect(self.handle_pm_result)
+        self.pm_task.complete_signal.connect(self.handle_dispatch_result)
         self.expert_task.complete_signal.connect(self.handle_expert_recommendation)
         self.planner_task.complete_signal.connect(self.execute_workflow)
+        self.fallback_chat_task.update_signal.connect(self.emit_normal_update)
+        self.fallback_chat_task.complete_signal.connect(self.emit_normal_finished)
 
         # --- 动态加载专家和工具定义 ---
         self._load_definitions_and_functions()
@@ -80,18 +87,48 @@ class AgentController(QObject):
         self.pm_task.start()
 
     @pyqtSlot(str)
-    def handle_pm_result(self, pm_raw: str):
-        """处理项目经理的调度结果，并开始向每个专家征求工具建议"""
-        pm_json = extract_json_from_string(pm_raw)
-        if not pm_json:
-            self.emit_error("错误：项目经理返回了无效的专家列表格式。")
-            return
-        try:
-            selected_expert_names = json.loads(pm_json)
-        except json.JSONDecodeError:
-            self.emit_error("错误：无法解析项目经理返回的专家列表。")
+    def handle_dispatch_result(self, dispatch_raw: str):
+        """
+        处理项目经理返回的专家列表。
+        - 如果列表中只包含 fallback 专家，则进入聊天模式。
+        - 否则，正常向列表中的所有专家分派任务。
+        """
+        logging.info(f"--- Raw Dispatcher Response ---:\n{dispatch_raw}\n---------------------------------")
+
+        dispatch_json = extract_json_from_string(dispatch_raw)
+
+        if not dispatch_json:
+            error_msg = "错误：调度员返回了无效的格式（未能提取出JSON）。"
+            logging.error(error_msg + f" Raw output was: {dispatch_raw}")
+            self.emit_error(error_msg)
             return
 
+        try:
+            # 处理列表
+            cleaned_json_str = dispatch_json.strip()
+            selected_expert_names = json.loads(cleaned_json_str)
+
+            if not isinstance(selected_expert_names, list):
+                raise TypeError("Dispatcher response is not a list.")
+
+        except (json.JSONDecodeError, TypeError) as e:
+            error_msg = f"错误：无法将调度员的响应解析为专家列表。Error: {e}"
+            logging.error(error_msg + f" Cleaned JSON was: {dispatch_json}")
+            self.emit_error(error_msg)
+            return
+
+        # 情况一：列表为空，或只包含 fallback 专家 (处理闲聊和无法处理的任务)
+        if not selected_expert_names or (
+                len(selected_expert_names) == 1 and selected_expert_names[0] == "general_fallback_expert"):
+            self.emit_update("正在准备回复...")
+            user_input = self.execution_context.get("user_input")
+
+            # 直接启动聊天Task
+            self.fallback_chat_task.set_topic(user_input)
+            self.fallback_chat_task.start()
+            return  # 直接返回，跳过后续流程
+
+        # 情况二：列表包含一个或多个需要使用工具的专家
         self.emit_update(f"团队组建完成：{', '.join(selected_expert_names)}。正在向各位专家征求工具建议...")
 
         self.execution_context.update({
@@ -240,6 +277,12 @@ class AgentController(QObject):
 
     def emit_update(self, message: str):
         self.update_signal.emit(message)
+
+    def emit_normal_update(self, message: str):
+        self.normal_update_signal.emit(message)
+
+    def emit_normal_finished(self, message: str):
+        self.normal_finished_signal.emit(message)
 
     def emit_finished(self, message: str):
         self.finished_signal.emit(message)
