@@ -79,7 +79,7 @@ class MeetingBottomWidget(QWidget):
             if  os.path.exists(filename):
                 MeetingFile.open_file(filename)
                 
-        def switchViewType(self):
+        def switchViewType(self, mode):
             if PublicTypes.viewType == "sidebar":
                 self.ui.meetingSwitchBtn.setGeometry(183, 74, 114, 36)
                 self.ui.exportMeetingBtn.setGeometry(10, 140, 114, 36)

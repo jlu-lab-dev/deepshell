@@ -10,6 +10,7 @@ from ui.page.about_page import AboutPage
 from ui.page.apikey_config_page import ApiKeyConfigPage
 from main_window import MainWinTitle, SettingMenu
 from main_window import MainWin
+from ui.utils import ViewMode
 from ui.theme_manager import ThemeManager
 
 
@@ -18,13 +19,19 @@ class ShadowWindow(QWidget):
         super().__init__()
         available_geometry = QApplication.desktop().availableGeometry()
         # 窗口尺寸 - 稍微窄一点，高度为屏幕的90%
-        self.shadow_win_width = 450
+        self.shadow_win_width = 480
         self.shadow_win_height = int(available_geometry.height() * 0.75)
+
+        # NEW: 提前加载好“选中”和“空”图标
+        self.select_icon = QIcon('ui/icon/menu_select.png')
+        self.empty_icon = QIcon()
+
         self.theme_manager = ThemeManager()
+        self.current_view_mode = None
         self.init_ui()
         self._is_drag = False  # 拖动
         self.move_DragPosition = QPoint()
-        
+
         # 连接主题切换信号
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
         self.mainwin.handle_function_selection("智能助手")
@@ -34,7 +41,7 @@ class ShadowWindow(QWidget):
         self.setWindowIcon(QIcon(ConfigManager().app_config['logo']))
         self.setObjectName('shadow_window')
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)  # Qt.Dialog主要用于在任务栏隐藏图标
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.setStyleSheet(
             '''
             #shadowindow{
@@ -48,7 +55,7 @@ class ShadowWindow(QWidget):
         self.resize(self.shadow_win_width, self.shadow_win_height)
 
         # 标题中间的文字
-        self.middle_label = QLabel()   # 中间的标签
+        self.middle_label = QLabel()
         self.middle_label.setStyleSheet("""
             font-family: Microsoft YaHei;
             font-weight: 400;
@@ -57,17 +64,13 @@ class ShadowWindow(QWidget):
         """)
         self.middle_label.setAlignment(Qt.AlignCenter)
         self.middle_label.setText("智能助手")
-        self.middle_label.hide()  # 初始状态隐藏，当后面点击窗口的时候进行显示
+        self.middle_label.hide()
 
         # 语音按钮
         self.speech_button = QPushButton()
         self.speech_button.setFixedSize(24, 24)
         self.speech_button.setFlat(True)
-        self.speech_button.setStyleSheet(
-            '''
-            QPushButton{background-color: transparent;border:none;color:white;}
-            '''
-        )
+        self.speech_button.setStyleSheet("QPushButton{background-color: transparent;border:none;color:white;}")
         self.speech_button.setIcon(QIcon('ui/icon/icon_标题栏_麦克风.png'))
         self.speech_button.setIconSize(QSize(24, 24))
         self.speech_button.clicked.connect(self.switch2speech)
@@ -87,9 +90,16 @@ class ShadowWindow(QWidget):
         # 为设置按钮添加二级菜单
         menu = SettingMenu()
         sub_menu = menu.addMenu("显示模式")
-        self.action_sidebar = QAction(QIcon('ui/icon/menu_select.png'), "侧边栏模式")
-        self.action_sidebar.triggered.connect(self.switchToSidebar)
+
+        # MODIFIED: 创建时不设置图标，后续动态更新
+        self.action_sidebar = QAction("侧边栏模式")
+        self.action_sidebar.triggered.connect(lambda: self.switch_view_mode(ViewMode.SIDEBAR))
         sub_menu.addAction(self.action_sidebar)
+
+        self.action_window = QAction("窗口模式")
+        self.action_window.triggered.connect(lambda: self.switch_view_mode(ViewMode.WINDOW))
+        sub_menu.addAction(self.action_window)
+
         menu.sub_menu = sub_menu
         menu.setSubMenu()
 
@@ -103,7 +113,6 @@ class ShadowWindow(QWidget):
         theme_menu.addAction(self.action_light)
 
         menu.addAction("记忆管理", self.show_config_page)
-
         menu.addAction("配置", self.show_config_page)
         menu.addSeparator()
         menu.addAction("关于", self.show_about_page)
@@ -112,20 +121,14 @@ class ShadowWindow(QWidget):
         # 关闭按钮
         self.close_btn = QPushButton()
         self.close_btn.setFixedSize(24, 24)
-        self.close_btn.setStyleSheet(
-            '''
-            QPushButton{background-color:transparent;border:none;color:white;}
-            '''
-        )
+        self.close_btn.setStyleSheet("QPushButton{background-color:transparent;border:none;color:white;}")
         self.close_btn.setIcon(QIcon('ui/icon/icon_标题栏_关闭.png'))
         self.close_btn.setIconSize(QSize(24, 24))
         self.close_btn.clicked.connect(self.main_window_close)
-        self.close_btn.setFixedSize(24, 24)
 
         # 标题
-        self.title = MainWinTitle(title_height=48)
-        self.title.title_layout.addItem(
-            QSpacerItem(100, 50, QSizePolicy.Expanding, QSizePolicy.Minimum))  # 将弹性空间添加到布局中，确保其居中
+        self.title = MainWinTitle(title_height=48, parent=self)
+        self.title.title_layout.addItem(QSpacerItem(100, 50, QSizePolicy.Expanding, QSizePolicy.Minimum))
         self.title.title_layout.insertWidget(3, self.middle_label)
         self.title.title_layout.addWidget(self.speech_button)
         self.title.title_layout.addWidget(self.setting_btn)
@@ -148,11 +151,9 @@ class ShadowWindow(QWidget):
         self.settingPage = SettingsPage(self)
         self.configPage = ApiKeyConfigPage(self)
 
-        self.switchToSidebar()
-        # self.move_to_right_bottom()
-        self.move_to_center() # only for demo
+        # MODIFIED: 调用新的统一函数进行初始化
+        self.switch_view_mode(ViewMode.SIDEBAR)
 
-    # 切换功能跳转函数
     def switch2speech(self):
         if self.mainwin.speech_page.isHidden():
             self.mainwin.handle_function_selection("语音聊天")
@@ -169,54 +170,71 @@ class ShadowWindow(QWidget):
             self.mainwin.shift2home_page()
 
     def get_primary_screen_geometry(self):
-        """获取主屏幕的几何信息"""
-        desktop = QDesktopWidget()
-        screen_count = desktop.screenCount()
-        if screen_count > 1:
-            # 多屏幕情况下，使用第一块屏幕
-            return desktop.availableGeometry(0)
-        else:
-            # 单屏幕情况下，使用默认屏幕
-            return desktop.availableGeometry()
+        return QDesktopWidget().availableGeometry()
 
+    # MODIFIED: 修正为使用 frameGeometry 以精确定位
     def move_to_right_bottom(self):
         """将窗口移动到屏幕的右下角"""
         screen_geometry = self.get_primary_screen_geometry()
-
-        # 计算窗口的新位置
-        x = screen_geometry.right() - self.width()
-        y = screen_geometry.bottom() - self.height()
+        frame_geo = self.frameGeometry()
+        x = screen_geometry.right() - frame_geo.width()
+        y = screen_geometry.bottom() - frame_geo.height()
         self.move(x, y)
 
     def move_to_center(self):
         screen_geo = self.get_primary_screen_geometry()
+        frame_geo = self.frameGeometry()
         pos = QPoint(
-            int((screen_geo.width() - self.width()) / 2),
-            int((screen_geo.height() - self.height()) / 2)
+            int((screen_geo.width() - frame_geo.width()) / 2),
+            int((screen_geo.height() - frame_geo.height()) / 2)
         )
         self.move(pos)
 
-    # 切换到侧边栏模式
-    def switchToSidebar(self):
-        self.mainwin.chat_box.switchViewType()
-        self.mainwin.speech_page.switchViewType()
-        self.mainwin.meetingWgt.switchViewType()
-        self.mainwin.meeting_bottom_ui.switchViewType()
+    def switch_view_mode(self, mode: ViewMode):
+        """统一的视图模式切换函数"""
+        if self.current_view_mode == mode:
+            return
 
-        self.mainwin.setMaximumHeight(self.shadow_win_height - self.title.title_height)
-        self.mainwin.resize(self.shadow_win_width, self.shadow_win_height - self.title.title_height)
+        self.current_view_mode = mode
+        self.update_menu_icon_state(mode)  # NEW: 调用函数更新菜单图标
 
-        self.title.switchViewType()
+        self.mainwin.chat_box.switchViewType(mode)
+        self.mainwin.speech_page.switchViewType(mode)
+        self.mainwin.meetingWgt.switchViewType(mode)
+        self.mainwin.meeting_bottom_ui.switchViewType(mode)
+        self.title.switchViewType(mode)
 
-        self.setMaximumHeight(self.shadow_win_height)
-        self.setMaximumWidth(self.shadow_win_width)
-        self.resize(self.shadow_win_width, self.shadow_win_height)
+        if mode == ViewMode.SIDEBAR:
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+            self.mainwin.setMaximumHeight(self.shadow_win_height - self.title.title_height)
+            self.mainwin.resize(self.shadow_win_width, self.shadow_win_height - self.title.title_height)
 
-        # self.move_to_right_bottom()
-        self.move_to_center()  # only for demo
+            self.setMaximumHeight(self.shadow_win_height)
+            self.setMaximumWidth(self.shadow_win_width)
+            self.resize(self.shadow_win_width, self.shadow_win_height)
+            self.move_to_right_bottom()
+
+        elif mode == ViewMode.WINDOW:
+            self.setWindowFlags(Qt.Window)
+            self.setMinimumSize(600, 800)
+            desktop_size = QDesktopWidget().screenGeometry()
+            self.setMaximumSize(desktop_size.width(), desktop_size.height())
+            self.resize(700, 900)
+            self.move_to_center()
+
         self.show()
         self.raise_()
         self.activateWindow()
+
+    # NEW: 新增函数，专门用于更新菜单项的图标状态
+    def update_menu_icon_state(self, mode: ViewMode):
+        """根据当前的视图模式，更新菜单项的勾选图标"""
+        if mode == ViewMode.SIDEBAR:
+            self.action_sidebar.setIcon(self.select_icon)
+            self.action_window.setIcon(self.empty_icon)
+        elif mode == ViewMode.WINDOW:
+            self.action_sidebar.setIcon(self.empty_icon)
+            self.action_window.setIcon(self.select_icon)
 
     def show_config_page(self):
         self.configPage.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
@@ -233,7 +251,7 @@ class ShadowWindow(QWidget):
         self.aboutPage.show()
 
     def change_title_midlabel(self, text):
-        if text == "系统功能": # only for demo
+        if text == "系统功能":
             text = "智能助手"
 
         if text == "智能助手":
@@ -251,45 +269,39 @@ class ShadowWindow(QWidget):
         self.hide()
 
     def on_theme_changed(self, theme_name):
-        """主题切换时的回调"""
-        self.update()  # 重绘窗口
-    
-    # 重写原有方法 Start
+        self.update()
+
     def paintEvent(self, event):
-        # 创建一个QPainter对象，并为当前窗口提供绘图功能
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)  # 抗锯齿
-        
-        # 根据主题获取背景颜色
+        painter.setRenderHint(QPainter.Antialiasing)
+
         colors = self.theme_manager.get_colors()
         bg_color = colors['window_bg']
-        
-        # 使用纯色带圆角
+
         path = QPainterPath()
         rect = QRectF(self.rect())
-        path.addRoundedRect(rect, 16, 16)  # 16px圆角 - 更加圆润
-        painter.fillPath(path, QColor(bg_color))
+
+        if self.current_view_mode == ViewMode.SIDEBAR:
+            path.addRoundedRect(rect, 16, 16)
+            painter.fillPath(path, QColor(bg_color))
+        else:
+            painter.fillRect(rect, QColor(bg_color))
 
     def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
         if a0.key() == Qt.Key_Escape:
             self.mainwin.shift2home_page()
 
     def mousePressEvent(self, event):
-        # 重写鼠标点击的事件
-        if event.button() == Qt.LeftButton:
-            # 鼠标左键点击标题栏区域
-            self._is_drag = True
-            self.move_DragPosition = event.globalPos() - self.pos()
-            event.accept()
+        if self.current_view_mode == ViewMode.SIDEBAR and event.button() == Qt.LeftButton:
+            if self.title.geometry().contains(event.pos()):
+                self._is_drag = True
+                self.move_DragPosition = event.globalPos() - self.pos()
+                event.accept()
 
     def mouseReleaseEvent(self, event):
         self._is_drag = False
 
     def mouseMoveEvent(self, event):
-        # 判断鼠标位置切换鼠标手势
-        self.setCursor(Qt.ArrowCursor)
-        if Qt.LeftButton and self._is_drag:
-            # 标题栏拖放窗口位置
+        if self.current_view_mode == ViewMode.SIDEBAR and Qt.LeftButton and self._is_drag:
             self.move(event.globalPos() - self.move_DragPosition)
             event.accept()
-    # 重写原有方法 End
