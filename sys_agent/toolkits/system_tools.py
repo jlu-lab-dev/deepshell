@@ -173,6 +173,64 @@ def list_running_applications():
         return atomic_result(False, f"获取应用列表失败: {e}")
 
 
+def list_applications_by_memory_usage(memory_threshold_mb: int = 500):
+    """
+    获取内存使用量超过指定阈值（单位：MB）的应用列表。
+    返回信息包括每个应用的PID、名称和内存使用量。
+    """
+    try:
+        if not isinstance(memory_threshold_mb, int) or memory_threshold_mb <= 0:
+            return atomic_result(False, "内存阈值必须是一个正整数。")
+
+        app_list = []
+        ignore_list = [
+            'svchost.exe', 'conhost.exe', 'runtimebroker.exe',
+            'system', 'wininit.exe', 'services.exe', 'lsass.exe'
+        ]
+
+        for p in psutil.process_iter(['pid', 'name', 'username', 'memory_info']):
+            try:
+                is_user_process = p.info['username'] and platform.system() == "Windows" and "SYSTEM" not in p.info[
+                    'username']
+                is_not_ignored = p.info['name'].lower() not in ignore_list
+
+                if is_user_process and is_not_ignored:
+                    memory_mb = p.info['memory_info'].rss / (1024 * 1024)
+
+                    # --- CORE CHANGE: Use the parameter for filtering ---
+                    if memory_mb > memory_threshold_mb:
+                        # Display logic: If over 1024MB, show as GB, otherwise show as MB
+                        if memory_mb >= 1024:
+                            display_memory = f"{round(memory_mb / 1024, 2)} GB"
+                        else:
+                            display_memory = f"{int(memory_mb)} MB"
+
+                        app_list.append({
+                            "pid": p.info['pid'],
+                            "name": p.info['name'],
+                            "memory_usage": display_memory,
+                            "memory_mb_raw": memory_mb  # Keep raw value for sorting
+                        })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        # Sort by the raw memory value
+        sorted_apps = sorted(app_list, key=lambda x: x['memory_mb_raw'], reverse=True)
+
+        # Clean up the raw value before returning the result if you want
+        for app in sorted_apps:
+            del app['memory_mb_raw']
+
+        if not sorted_apps:
+            message = f"未找到内存占用超过 {memory_threshold_mb} MB 的应用程序。"
+        else:
+            message = f"成功找到以下内存占用超过 {round(memory_threshold_mb / 1024, 1)} GB 的应用程序：\n" + '\n'.join(f"{a['memory_usage']} | {a['name']} | {a['pid']}" for a in sorted_apps)
+
+        return atomic_result(True, message, applications=sorted_apps)
+    except Exception as e:
+        return atomic_result(False, f"获取应用列表失败: {e}")
+
+
 def close_application_by_name(app_name: str):
     """根据提供的应用名称（例如 'chrome.exe'）关闭所有匹配的进程。"""
     if not app_name:
@@ -193,6 +251,21 @@ def close_application_by_name(app_name: str):
     except Exception as e:
         return atomic_result(False, f"关闭应用 '{app_name}' 时发生错误: {e}")
 
+
+def close_application_by_pid(pid: int):
+    """根据进程ID（PID）关闭一个正在运行的应用程序，这是一种精确的关闭方式。"""
+    try:
+        if not isinstance(pid, int):
+            return atomic_result(False, "PID 必须是一个整数。")
+
+        proc = psutil.Process(pid)
+        proc_name = proc.name()
+        proc.terminate()
+        return atomic_result(True, f"成功关闭了进程 '{proc_name}' (PID: {pid})。")
+    except psutil.NoSuchProcess:
+        return atomic_result(False, f"未找到 PID 为 {pid} 的进程。可能已经关闭。")
+    except Exception as e:
+        return atomic_result(False, f"关闭 PID {pid} 时发生错误: {e}")
 
 def open_task_manager():
     """
@@ -244,7 +317,9 @@ FUNCTION_MAP = {
     "open_bluetooth_settings": open_bluetooth_settings,
     "lock_screen": lock_screen,
     "list_running_applications": list_running_applications,
+    "list_applications_by_memory_usage": list_applications_by_memory_usage,
     "close_application_by_name": close_application_by_name,
+    "close_application_by_pid": close_application_by_pid,
     "open_task_manager": open_task_manager,
 }
 

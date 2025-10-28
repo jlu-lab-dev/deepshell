@@ -130,5 +130,33 @@
       "properties": {},
       "required": []
     }
+  },
+  {
+    "name": "list_applications_by_memory_usage",
+    "description": "获取内存使用量超过指定阈值的用户应用列表。返回每个应用的PID、名称和内存占用情况。阈值单位是MB。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "memory_threshold_mb": {
+          "type": "integer",
+          "description": "要筛选的内存阈值，单位是MB。例如，要查找超过1GB的应用，应传入1024。"
+        }
+      },
+      "required": ["memory_threshold_mb"]
+    }
+  },
+  {
+    "name": "close_application_by_pid",
+    "description": "根据一个进程的唯一ID（PID）来精确地关闭该进程。当需要确保关闭的是特定进程时使用。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "description": "要关闭的进程的PID"
+        }
+      },
+      "required": ["pid"]
+    }
   }
 ]
