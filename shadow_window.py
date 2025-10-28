@@ -218,7 +218,8 @@ class ShadowWindow(QWidget):
             self.mainwin.setFixedSize(self.shadow_win_width, self.shadow_win_height - self.title.title_height)
 
             # 4. 移动到目标位置
-            self.move_to_right_bottom()
+            self.move_to_center() # only for demo
+            # self.move_to_right_bottom()
 
         elif mode == ViewMode.WINDOW:
             # --- 窗口模式逻辑 ---
