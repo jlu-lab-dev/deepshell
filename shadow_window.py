@@ -149,7 +149,8 @@ class ShadowWindow(QWidget):
         self.configPage = ApiKeyConfigPage(self)
 
         self.switchToSidebar()
-        self.move_to_right_bottom()
+        # self.move_to_right_bottom()
+        self.move_to_center() # only for demo
 
     # 切换功能跳转函数
     def switch2speech(self):
@@ -188,13 +189,12 @@ class ShadowWindow(QWidget):
         self.move(x, y)
 
     def move_to_center(self):
-        """将窗口移动到屏幕的中间"""
-        screen_geometry = self.get_primary_screen_geometry()
-
-        # 计算窗口的新位置
-        x = screen_geometry.width() / 2 - self.width() / 2
-        y = screen_geometry.height() / 2 - self.height() / 2
-        self.move(x, y)
+        screen_geo = self.get_primary_screen_geometry()
+        pos = QPoint(
+            int((screen_geo.width() - self.width()) / 2),
+            int((screen_geo.height() - self.height()) / 2)
+        )
+        self.move(pos)
 
     # 切换到侧边栏模式
     def switchToSidebar(self):
@@ -212,7 +212,8 @@ class ShadowWindow(QWidget):
         self.setMaximumWidth(self.shadow_win_width)
         self.resize(self.shadow_win_width, self.shadow_win_height)
 
-        self.move_to_right_bottom()
+        # self.move_to_right_bottom()
+        self.move_to_center()  # only for demo
         self.show()
         self.raise_()
         self.activateWindow()
