@@ -153,11 +153,30 @@ def move_file(src, dst):
         return atomic_result(False, f"移动文件失败: {e}")
 
 
-def create_directory(path):
+def create_directory(path: str, base_directory: str = None):
+    """
+    创建目录。可以指定一个基础目录，将在该目录下创建新目录。
+
+    Args:
+        path (str): 要创建的目录的名称或相对/绝对路径。
+        base_directory (str, optional): 一个基础目录。如果提供，'path'将被视为在其下的相对路径。
+                                        默认为 None，此时 'path' 被视为普通路径。
+
+    Returns:
+        dict: 操作结果。
+    """
     try:
-        dir_path = expanduser(os.path.normpath(path))
-        os.makedirs(dir_path, exist_ok=True)
-        return atomic_result(True, f"目录已创建：{dir_path}")
+        if base_directory:
+            # 如果提供了基础目录，则将路径拼接起来
+            base_path = expanduser(os.path.normpath(base_directory))
+            full_path = os.path.join(base_path, path)
+        else:
+            # 否则，像以前一样处理路径
+            full_path = expanduser(os.path.normpath(path))
+
+        # exist_ok=True 确保如果目录已存在，不会抛出错误
+        os.makedirs(full_path, exist_ok=True)
+        return atomic_result(True, f"目录已成功创建或已存在。", directory_path=full_path)
     except Exception as e:
         return atomic_result(False, f"创建目录失败: {e}")
 
@@ -213,6 +232,123 @@ def find_file(filename, path=".", nums=-1):
     except Exception as e:
         # 现在的错误信息会更具体，因为我们已经处理了 NoneType 的情况
         return atomic_result(False, f"查找文件时发生意外错误: {e}", found_files=[])
+
+
+def find_files_by_extension(directory: str, extensions: list[str]):
+    """
+    在一个特定目录（不含子目录）中，根据文件扩展名列表查找所有匹配的文件。
+
+    Args:
+        directory (str): 要搜索的文件夹路径。
+        extensions (list[str]): 一个包含文件扩展名的列表，例如 ['.jpg', '.png', '.docx']。
+
+    Returns:
+        dict: 包含找到的文件路径列表的结果。
+    """
+    try:
+        full_path = expanduser(os.path.normpath(directory))
+        if not os.path.isdir(full_path):
+            return atomic_result(False, f"指定的路径不是一个有效的目录: {full_path}")
+
+        found_files = []
+        # 将所有扩展名转换为小写，以进行不区分大小写的比较
+        lower_extensions = [ext.lower() for ext in extensions]
+
+        for item in os.listdir(full_path):
+            item_path = os.path.join(full_path, item)
+            if os.path.isfile(item_path):
+                # 获取文件的扩展名（例如 '.txt'）
+                file_ext = Path(item).suffix.lower()
+                if file_ext in lower_extensions:
+                    found_files.append(item_path)
+
+        if not found_files:
+            return atomic_result(True, "操作成功，但未找到匹配指定扩展名的文件。", file_paths=[])
+
+        return atomic_result(True, f"成功找到 {len(found_files)} 个匹配的文件。", file_paths=found_files)
+
+    except Exception as e:
+        return atomic_result(False, f"按扩展名查找文件时出错: {e}")
+
+
+def batch_rename_files(file_paths: list[str], rename_pattern: str, start_number: int = 1):
+    """
+    根据指定的模式批量重命名文件列表。模式中必须包含 '{num}' 作为编号占位符。
+
+    Args:
+        file_paths (list[str]): 要重命名的文件的完整路径列表。
+        rename_pattern (str): 重命名的格式，例如 '活动照片-{num}'。'{num}' 会被替换为序号。
+        start_number (int): 编号的起始数字，默认为1。
+
+    Returns:
+        dict: 包含成功和失败记录的结果。
+    """
+    if not file_paths:
+        return atomic_result(False, "文件列表不能为空。")
+    if '{num}' not in rename_pattern:
+        return atomic_result(False, "重命名模式中必须包含编号占位符 '{num}'。")
+
+    success_log = []
+    failure_log = []
+
+    for i, old_path_str in enumerate(file_paths):
+        try:
+            old_path = Path(old_path_str)
+            # 获取文件扩展名，例如 ".jpg"
+            extension = old_path.suffix
+            # 获取文件所在的目录
+            directory = old_path.parent
+
+            # 使用模式和序号生成新的文件名（不含扩展名）
+            new_name_stem = rename_pattern.format(num=start_number + i)
+            # 组合成完整的新文件名
+            new_name = f"{new_name_stem}{extension}"
+            # 组合成完整的新路径
+            new_path = directory / new_name
+
+            os.rename(old_path, new_path)
+            success_log.append({"from": str(old_path), "to": str(new_path)})
+        except Exception as e:
+            failure_log.append({"file": str(old_path_str), "error": str(e)})
+
+    message = (f"批量重命名完成。成功: {len(success_log)} 个, 失败: {len(failure_log)} 个。")
+    return atomic_result(True, message, success_details=success_log, failure_details=failure_log)
+
+
+def batch_add_prefix_to_filenames(file_paths: list[str], prefix: str):
+    """
+    为一批文件统一添加指定的前缀。
+
+    Args:
+        file_paths (list[str]): 文件的完整路径列表。
+        prefix (str): 要添加到每个文件名前面的前缀。
+
+    Returns:
+        dict: 包含成功和失败记录的结果。
+    """
+    if not file_paths:
+        return atomic_result(False, "文件列表不能为空。")
+
+    success_log = []
+    failure_log = []
+
+    for old_path_str in file_paths:
+        try:
+            old_path = Path(old_path_str)
+            directory = old_path.parent
+            old_filename = old_path.name
+
+            # 构造新的文件名
+            new_filename = f"{prefix}{old_filename}"
+            new_path = directory / new_filename
+
+            os.rename(old_path, new_path)
+            success_log.append({"from": str(old_path), "to": str(new_path)})
+        except Exception as e:
+            failure_log.append({"file": str(old_path_str), "error": str(e)})
+
+    message = (f"批量添加前缀完成。成功: {len(success_log)} 个, 失败: {len(failure_log)} 个。")
+    return atomic_result(True, message, success_details=success_log, failure_details=failure_log)
 
 def read_table_data(path: str):
     try:
@@ -319,4 +455,7 @@ FUNCTION_MAP = {
     "read_table_data": read_table_data,
     "save_text_as_word_doc": save_text_as_word_doc,
     "clean_system_cache": clean_system_cache,
+    "find_files_by_extension": find_files_by_extension,
+    "batch_rename_files": batch_rename_files,
+    "batch_add_prefix_to_filenames": batch_add_prefix_to_filenames,
 }

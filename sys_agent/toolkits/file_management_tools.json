@@ -148,16 +148,22 @@
   },
   {
     "name": "create_directory",
-    "description": "创建新目录",
+    "description": "创建一个新的文件夹。可以通过 'base_directory' 参数指定在哪个父文件夹下创建。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要创建的目录路径"
+          "description": "要创建的文件夹的名称，例如 '我的新文件夹'。"
+        },
+        "base_directory": {
+          "type": "string",
+          "description": "(可选) 父文件夹的路径。如果提供了这个参数，'path' 指定的文件夹将被创建在这个父文件夹内部。"
         }
       },
-      "required": ["path"]
+      "required": [
+        "path"
+      ]
     }
   },
   {
@@ -273,6 +279,67 @@
       "type": "object",
       "properties": {},
       "required": []
+    }
+  },
+  {
+    "name": "find_files_by_extension",
+    "description": "在一个指定的文件夹内（不包括子文件夹），根据文件扩展名列表来查找所有匹配的文件。用于批量筛选特定类型的文件。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "description": "要进行搜索的文件夹的路径。"
+        },
+        "extensions": {
+          "type": "array",
+          "description": "一个包含文件扩展名的列表，例如 ['.jpg', '.png', '.docx']。",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["directory", "extensions"]
+    }
+  },
+  {
+    "name": "batch_rename_files",
+    "description": "对一个文件列表进行批量重命名。重命名格式中必须包含 '{num}' 作为自动递增的编号占位符。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file_paths": {
+          "type": "array",
+          "description": "需要被重命名的文件的完整路径列表。",
+          "items": { "type": "string" }
+        },
+        "rename_pattern": {
+          "type": "string",
+          "description": "新的文件名格式，例如 '活动照片-{num}' 或 'report_{num}'。"
+        },
+        "start_number": {
+          "type": "integer",
+          "description": "编号的起始数字，默认为 1。"
+        }
+      },
+      "required": ["file_paths", "rename_pattern"]
+    }
+  },
+  {
+    "name": "batch_add_prefix_to_filenames",
+    "description": "对一个文件列表中的所有文件，在它们现有文件名的最前面统一添加一个指定的前缀。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file_paths": {
+          "type": "array",
+          "description": "需要添加前缀的文件的完整路径列表。",
+          "items": { "type": "string" }
+        },
+        "prefix": {
+          "type": "string",
+          "description": "要添加到每个文件名前面的文本前缀。"
+        }
+      },
+      "required": ["file_paths", "prefix"]
     }
   }
 ]
