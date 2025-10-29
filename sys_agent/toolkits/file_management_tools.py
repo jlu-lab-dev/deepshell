@@ -68,16 +68,6 @@ def open_file(path):
     except Exception as e:
         return atomic_result(False, f"打开文件失败: {e}")
 
-
-def list_directory(path='.'):
-    try:
-        full_path = expanduser(os.path.normpath(path))
-        files = os.listdir(full_path)
-        return atomic_result(True, f"目录内容获取成功", files=files)
-    except Exception as e:
-        return atomic_result(False, f"获取目录内容失败: {e}")
-
-
 def create_file(path, content=None):
     """
     跨平台创建文件函数。
@@ -153,6 +143,29 @@ def move_file(src, dst):
         return atomic_result(False, f"移动文件失败: {e}")
 
 
+def batch_move_files(file_paths: list[str], destination_directory: str):
+    """
+    将一个文件列表中的所有文件，一次性移动到指定的目标文件夹内。
+    """
+    if not file_paths:
+        return atomic_result(False, "文件列表不能为空。")
+    try:
+        dest_path = expanduser(os.path.normpath(destination_directory))
+        if not os.path.isdir(dest_path):
+            return atomic_result(False, f"移动失败：目标路径 '{dest_path}' 不是一个有效的文件夹。")
+        success_log = []
+        failure_log = []
+        for file_path in file_paths:
+            try:
+                shutil.move(file_path, dest_path)
+                success_log.append({"file": os.path.basename(file_path), "moved_to": dest_path})
+            except Exception as e:
+                failure_log.append({"file": file_path, "error": str(e)})
+        message = f"批量移动完成。成功: {len(success_log)} 个, 失败: {len(failure_log)} 个。"
+        return atomic_result(True, message, success_details=success_log, failure_details=failure_log)
+    except Exception as e:
+        return atomic_result(False, f"批量移动过程中发生意外错误: {e}")
+
 def create_directory(path: str, base_directory: str = None):
     """
     创建目录。可以指定一个基础目录，将在该目录下创建新目录。
@@ -225,14 +238,69 @@ def find_file(filename, path=".", nums=-1):
                         return atomic_result(True, f"找到{len(matches)}个匹配文件", found_files=matches)
 
         if matches:
-            return atomic_result(True, f"找到{len(matches)}个匹配文件: " + ", ".join(m for m in matches), found_files=matches)
+            return atomic_result(True, f"找到{len(matches)}个匹配文件: " + ", ".join(m for m in matches), found_paths=matches)
         else:
-            return atomic_result(False, "未找到匹配文件", found_files=[])
+            return atomic_result(False, "未找到匹配文件", found_paths=[])
 
     except Exception as e:
         # 现在的错误信息会更具体，因为我们已经处理了 NoneType 的情况
-        return atomic_result(False, f"查找文件时发生意外错误: {e}", found_files=[])
+        return atomic_result(False, f"查找文件时发生意外错误: {e}", found_paths=[])
 
+
+def find_path_by_keywords(keywords: list[str], search_directory: str, search_depth: int = 3):
+    """
+    通过关键词在指定目录中进行模糊查找，返回一个按匹配度从高到低排序的
+    【纯文件/文件夹路径字符串列表】。
+    """
+    try:
+        full_path = expanduser(os.path.normpath(search_directory))
+        if not os.path.isdir(full_path):
+            return atomic_result(False, f"指定的搜索目录无效: {full_path}", found_paths=[])
+
+        matches = []
+
+        # 将起始路径也标准化，以便后续比较
+        normalized_start_path = os.path.normpath(full_path)
+
+        for root, dirs, files in os.walk(full_path, topdown=True):
+            # --- 核心修正点：使用更可靠的深度计算方法 ---
+            normalized_current_root = os.path.normpath(root)
+            # 计算从起始路径到当前路径的相对路径
+            relative_path = os.path.relpath(normalized_current_root, normalized_start_path)
+
+            # 如果是起始目录本身，深度为0；否则，计算分隔符数量
+            if relative_path == '.':
+                current_depth = 0
+            else:
+                current_depth = relative_path.count(os.sep) + 1
+
+            if current_depth >= search_depth:
+                dirs[:] = []
+
+            # --- 后续逻辑保持不变 ---
+            path_list_to_check = dirs + files
+
+            for name in path_list_to_check:
+                score = 0
+                for keyword in keywords:
+                    if keyword.lower() in name.lower():
+                        score += 1
+
+                if score > 0:
+                    full_match_path = os.path.join(root, name)
+                    matches.append({"path": full_match_path, "score": score})
+
+        if not matches:
+            return atomic_result(False, "未找到与关键词匹配的文件或文件夹。", found_paths=[])
+
+        sorted_matches = sorted(matches, key=lambda x: x['score'], reverse=True)
+
+        final_path_list = [match['path'] for match in sorted_matches]
+
+        return atomic_result(True, f"成功找到 {len(final_path_list)} 个可能的匹配项。", found_paths=final_path_list)
+
+    except Exception as e:
+        return atomic_result(False, f"通过关键词查找时出错: {e}", found_paths=[])
 
 def find_files_by_extension(directory: str, extensions: list[str]):
     """
@@ -441,13 +509,13 @@ def clean_system_cache():
 FUNCTION_MAP = {
     "get_user_folder_path": get_user_folder_path,
     "open_file": open_file,
-    "list_directory": list_directory,
     "create_file": create_file,
     "read_file": read_file,
     "write_file": write_file,
     "rename_file": rename_file,
     "copy_file": copy_file,
     "move_file": move_file,
+    "batch_move_files": batch_move_files,
     "create_directory": create_directory,
     "delete_file": delete_file,
     "get_current_directory": get_current_directory,
@@ -458,4 +526,5 @@ FUNCTION_MAP = {
     "find_files_by_extension": find_files_by_extension,
     "batch_rename_files": batch_rename_files,
     "batch_add_prefix_to_filenames": batch_add_prefix_to_filenames,
+    "find_path_by_keywords": find_path_by_keywords,
 }

@@ -28,21 +28,6 @@
     }
   },
   {
-    "name": "list_directory",
-    "description": "列出目录内容",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "要列出的目录路径，默认为当前目录",
-          "default": "."
-        }
-      },
-      "required": []
-    }
-  },
-  {
     "name": "create_file",
     "description": "创建新文件并可写入内容",
     "parameters": {
@@ -147,6 +132,25 @@
     }
   },
   {
+    "name": "batch_move_files",
+    "description": "将一个文件路径列表中的所有文件，一次性地移动到另一个目标文件夹中。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file_paths": {
+          "type": "array",
+          "description": "需要被移动的文件的完整路径列表。",
+          "items": { "type": "string" }
+        },
+        "destination_directory": {
+          "type": "string",
+          "description": "所有文件将被移入的目标文件夹的路径。"
+        }
+      },
+      "required": ["file_paths", "destination_directory"]
+    }
+  },
+  {
     "name": "create_directory",
     "description": "创建一个新的文件夹。可以通过 'base_directory' 参数指定在哪个父文件夹下创建。",
     "parameters": {
@@ -217,7 +221,7 @@
       "properties": {
         "success": { "type": "boolean" },
         "message": { "type": "string" },
-        "found_files": {
+        "found_paths": {
           "type": "array",
           "items": { "type": "string" },
           "description": "一个包含所有找到的文件完整路径的列表。"
@@ -298,6 +302,15 @@
         }
       },
       "required": ["directory", "extensions"]
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "found_paths": {
+          "type": "array",
+          "description": "匹配度递减的路径列表"
+        }
+      }
     }
   },
   {
@@ -340,6 +353,38 @@
         }
       },
       "required": ["file_paths", "prefix"]
+    }
+  },
+  {
+    "name": "find_path_by_keywords",
+    "description": "通过一组关键词，在指定目录的有限深度内模糊查找文件或文件夹。返回一个按匹配度排序的路径列表。非常适合用于根据用户模糊描述定位初始目标文件夹。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "keywords": {
+          "type": "array",
+          "description": "从用户指令中提取的核心关键词列表。例如，对于'待处理的季度资料'，关键词可以是 ['季度', '资料', '待处理']。",
+          "items": { "type": "string" }
+        },
+        "search_directory": {
+          "type": "string",
+          "description": "开始搜索的根目录路径，例如用户的桌面路径。"
+        },
+        "search_depth": {
+          "type": "integer",
+          "description": "向下搜索的子目录层数限制，默认为3层。"
+        }
+      },
+      "required": ["keywords", "search_directory"]
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "found_paths": {
+          "type": "array",
+          "description": "匹配度递减的路径列表"
+        }
+      }
     }
   }
 ]

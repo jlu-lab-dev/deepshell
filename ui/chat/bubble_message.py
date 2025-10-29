@@ -58,7 +58,7 @@ class TextMessage(QLabel):
             rect = self.font_metrics.boundingRect(self.msg_text)
         else:
             rect = self.font_metrics.boundingRect(html_text)
-        self.setMaximumWidth(rect.width() + 40)
+        self.setMaximumWidth(rect.width() + 45)
 
     def meeting_content_adjust_size(self):
         self.setMaximumWidth(500)

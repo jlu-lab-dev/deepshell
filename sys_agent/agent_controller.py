@@ -131,8 +131,8 @@ class AgentController(QObject):
             return
 
         # Case 2: It IS a workflow. Now we start showing the UI steps.
-        self.workflow_step_started.emit("dispatch", "DeepShell 正在生成工作流，请稍等...")
-        self.workflow_step_finished.emit("dispatch", True, f"工作流生成完成")
+        self.workflow_step_started.emit("dispatch", "DeepShell 正在理解需求...")
+        self.workflow_step_finished.emit("dispatch", True, f"了解任务")
 
         self.execution_context.update({
             "experts_to_consult": selected_expert_names,
@@ -184,7 +184,7 @@ class AgentController(QObject):
             self.error_signal.emit("Sorry, no suitable tools were found to handle your request.")
             return
 
-        self.workflow_step_started.emit("planning", "制定最终执行方案...")
+        self.workflow_step_started.emit("planning", "正在生成工作流...")
 
         final_tool_schemas = []
         all_defined_tools = [tool for tools in self.expert_tool_definitions.values() for tool in tools]
@@ -210,7 +210,7 @@ class AgentController(QObject):
             return
         try:
             workflow = json.loads(workflow_json)
-            self.workflow_step_finished.emit("planning", True, f"执行方案制定完成，共 {len(workflow)} 步")
+            self.workflow_step_finished.emit("planning", True, f"工作流生成完毕，共 {len(workflow)} 步，准备执行")
         except json.JSONDecodeError:
             self.workflow_step_finished.emit("planning", False,
                                              "Error: The planner generated invalid JSON for the workflow.")
@@ -240,11 +240,11 @@ class AgentController(QObject):
 
         try:
             resolved_args = self._resolve_args(step.get("args", {}), ctx["outputs"])
-
+            logging.info(f"No.{step['step_id']} | tool_name: {tool_name} | args: {resolved_args}")
             if tool_name and tool_name in self.MASTER_FUNCTION_MAP:
                 func = self.MASTER_FUNCTION_MAP[tool_name]
                 result = func(**resolved_args)
-
+                logging.info(f"No.{step['step_id']} | tool_name: {tool_name} | result: {result}")
                 ctx["outputs"][step_id] = result
                 message = str(result.get("message", "No details provided."))
 

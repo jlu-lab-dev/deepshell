@@ -322,6 +322,9 @@ class MainWin(QWidget):
 
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
+        self.sendTask.stop_flag = True
+        self.agent_thread.quit()
+
         if function_name == "智能助手":  # only for demo
             function_name = "系统功能"
 
@@ -610,6 +613,7 @@ class MainWin(QWidget):
         if self.current_func == "系统功能":
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
+            self.agent_thread.start()
             # Start the agent controller workflow
             QMetaObject.invokeMethod(self.agent_controller, "start_workflow", Qt.QueuedConnection,
                                      Q_ARG(str, full_message))

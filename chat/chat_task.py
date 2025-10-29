@@ -18,6 +18,8 @@ class ChatTask(QThread):
     def run(self):
         try:
             # 用于累积完整响应
+            self.stop_flag = False
+
             complete_response = ""
 
             # 流式处理响应
