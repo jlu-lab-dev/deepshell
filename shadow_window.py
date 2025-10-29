@@ -156,6 +156,7 @@ class ShadowWindow(QWidget):
         self.aboutPage = AboutPage(self)
         self.settingPage = SettingsPage(self)
         self.configPage = ApiKeyConfigPage(self)
+        self.configPage.hide()
 
         self.switch_view_mode(ViewMode.SIDEBAR)
     
@@ -362,12 +363,10 @@ class ShadowWindow(QWidget):
             self.action_window.setIcon(self.select_icon)
 
     def show_config_page(self):
-        self.configPage.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
+        self.configPage.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.configPage.show()
         self.configPage.raise_()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.configPage.move_to_center()
-        self.show()
 
     def show_about_page(self):
         self.aboutPage.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)

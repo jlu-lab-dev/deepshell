@@ -80,7 +80,7 @@ class OllamaTask(QThread):
             self.update_signal.emit(f"不支持的操作系统: {system}")
             return False
 
-    def is_model_pulled(self, model_name="deepseek-coder:1.3b"):
+    def is_model_pulled(self, model_name="deepseek-r1:1.5b"):
         """检查指定的模型是否已经被拉取"""
         if not self.is_ollama_installed():
             return False
@@ -99,7 +99,7 @@ class OllamaTask(QThread):
             # 如果ollama list命令失败，则假定模型不存在
             return False
 
-    def pull_model(self, model_name="deepseek-coder:1.3b"):
+    def pull_model(self, model_name="deepseek-r1:1.5b"):
         """使用Popen实时流式传输输出来拉取模型"""
         self.update_signal.emit(f"开始下载模型: {model_name}...")
         try:
@@ -168,7 +168,7 @@ class OllamaTask(QThread):
     def run(self):
         """执行完整的部署流程"""
         try:
-            model_to_deploy = "deepseek-coder:1.3b"  # 定义要部署的模型
+            model_to_deploy = "deepseek-r1:1.5b"  # 定义要部署的模型
 
             # 1. 检查/安装 Ollama
             if not self.is_ollama_installed():
