@@ -32,13 +32,18 @@ class AgentController(QObject):
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, model):
         super().__init__()
         # --- 初始化所有智能体Task ---
         self.pm_task = ProjectManagerTask()
         self.expert_task = ExpertToolRecommenderTask()
         self.planner_task = ChiefPlannerTask()
         self.fallback_chat_task = ChatTask()
+
+        self.pm_task.assistant.switch_model(model)
+        self.expert_task.assistant.switch_model(model)
+        self.planner_task.assistant.switch_model(model)
+        self.fallback_chat_task.assistant.switch_model(model)
 
         # --- 连接信号 ---
         self.pm_task.complete_signal.connect(self.handle_dispatch_result)
@@ -280,3 +285,9 @@ class AgentController(QObject):
             else:
                 resolved_args[key] = value
         return resolved_args
+
+    def switch_model(self, model):
+        self.pm_task.assistant.switch_model(model)
+        self.expert_task.assistant.switch_model(model)
+        self.planner_task.assistant.switch_model(model)
+        self.fallback_chat_task.assistant.switch_model(model)

@@ -1,3 +1,5 @@
+# model_manager.py
+
 from typing import Dict, Any, List, Generator
 from langchain_community.chat_models import ChatTongyi, ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
@@ -108,6 +110,7 @@ class ModelManager:
         Returns:
             Response stream from the model
         """
+        print("_get_chat_stream model_name is " + model_name)
         model = self.get_model(model_name)
         prepared_messages = self._prepare_messages(messages, system_prompt, session_id)
         

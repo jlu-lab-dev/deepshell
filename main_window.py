@@ -301,7 +301,7 @@ class MainWin(QWidget):
 
         # --- Agent Controller Setup ---
         self.agent_thread = QThread()
-        self.agent_controller = AgentController()
+        self.agent_controller = AgentController(self.current_model)
         self.agent_controller.moveToThread(self.agent_thread)
 
         # A dictionary to hold references to workflow step widgets
@@ -589,7 +589,8 @@ class MainWin(QWidget):
                     detected_lang = TranslateDetect.detect_language(message)
                     self.input_field.language_layout.itemAt(0).widget().set_current_language(detected_lang)
                 message = message+"[END]把用户输入翻译成"+self.input_field.language_layout.itemAt(2).widget().current_language
-            
+
+            print("send_quest_to_ai model is" + self.sendTask.assistant.model)
             self.sendTask.set_topic(message)
             self.sendTask.start()
         else:
@@ -867,6 +868,7 @@ class MainWin(QWidget):
     def switch_model(self, model):
         """传入模型名，如Qwen-Max、DeepSeek-V3，非中文名"""
         self.current_model = model
+        self.agent_controller.switch_model(model)
         self.sendTask.assistant.switch_model(model)
 
     def handle_gen_ppt(self,full_path):
