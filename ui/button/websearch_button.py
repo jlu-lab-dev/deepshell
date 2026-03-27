@@ -33,6 +33,12 @@ class WebSearchButton(QPushButton):
         self.icon_label = QLabel()
         self.icon_label.setFixedSize(16, 16)
         self.icon_label.setPixmap(QIcon("ui/icon/联网搜索.png").pixmap(16, 16))
+        self.icon_label.setStyleSheet("""
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """)
 
         self.name_label = QLabel("联网搜索")
         self.name_label.setStyleSheet("""

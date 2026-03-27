@@ -42,7 +42,7 @@ class FullScreenWindow(QWidget):
         # 连接主题切换信号
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
         if hasattr(self, 'mainwin') and self.mainwin:
-            self.mainwin.handle_function_selection("智能助手")
+            self.mainwin.handle_function_selection("智能问答")
     
     def init_ui(self):
         self.setWindowTitle(ConfigManager().app_config['name'])
@@ -563,7 +563,7 @@ class FullScreenWindow(QWidget):
 
     def update_main_title(self, text: str):
         """Slot to handle title change requests from MainWin."""
-        if text == "系统功能" or text == "智能助手":
+        if text == "系统功能" or text == "智能问答":
             # In fullscreen mode, revert to the app's main name for the home function
             self.title_label.setText(ConfigManager().app_config['name'])
         else:

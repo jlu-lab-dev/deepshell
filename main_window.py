@@ -28,6 +28,7 @@ from ppt.workflow.ppt_task import PPTTask
 from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 from sys_agent.intro_ui import SysFuncIntro
 from sys_agent.agent_controller import AgentController
+from sys_agent.react_agent import ReActAgentController
 from translation.intro_ui import TranslateIntroPage
 from translation.translate_task import TranslateTask
 from translation.translate_detect import TranslateDetect
@@ -85,7 +86,7 @@ class MainWin(QWidget):
         # 中间内容栈 Start
         self.contentStackWgt = QStackedWidget()
 
-        self.chat_intro = ChatIntroPage()  # 智能助手，即主界面
+        self.chat_intro = ChatIntroPage()  # 智能问答，即主界面
 
         self.ppt_intro = PPTIntroPage()    # AI PPT
 
@@ -185,7 +186,7 @@ class MainWin(QWidget):
 
         # 功能组件映射
         self.page_mapping = {
-            "智能助手": {
+            "智能问答": {
                 "main": self.chat_intro,
                 "chat": self.chat_box,
                 "bottom": self.input_field
@@ -236,15 +237,10 @@ class MainWin(QWidget):
             "语音聊天": {
                 "main": self.speech_page
             },
-            # "系统功能": {
-            #     "main": self.sys_func_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field,
-            # },
-            "系统功能": {  # only for demo
-                "main": self.chat_intro,
+            "AI Agent": {
+                "main": self.sys_func_intro,
                 "chat": self.chat_box,
-                "bottom": self.input_field
+                "bottom": self.input_field,
             },
         }
 
@@ -253,7 +249,7 @@ class MainWin(QWidget):
         self.current_model = "DeepSeek-V3"
         self.current_input = None    # string
         self.current_bubble_message = None
-        self.current_func = "智能助手"
+        self.current_func = "智能问答"
 
         # knowledge base setting
         self.selected_kb_id_list = []
@@ -320,13 +316,31 @@ class MainWin(QWidget):
 
         self.agent_thread.start()
 
+        # --- ReAct Agent Controller Setup ---
+        self.react_agent_thread = QThread()
+        self.react_agent_controller = ReActAgentController(self.current_model)
+        self.react_agent_controller.moveToThread(self.react_agent_thread)
+
+        # Connect ReActAgentController signals — same handlers as AgentController
+        self.react_agent_controller.workflow_step_started.connect(self.handle_workflow_step_started)
+        self.react_agent_controller.workflow_step_finished.connect(self.handle_workflow_step_finished)
+        self.react_agent_controller.finished_signal.connect(self.handle_agent_finished)
+        self.react_agent_controller.error_signal.connect(self.handle_agent_error)
+
+        self.react_agent_thread.start()
+
+        # Agent mode: 'pipeline' or 'react'
+        self.current_agent_mode = "pipeline"
+        self.input_field.agent_mode_signal.connect(self._on_agent_mode_changed)
+
+    def _on_agent_mode_changed(self, mode: str):
+        self.current_agent_mode = mode
+
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
         self.sendTask.stop_flag = True
         self.agent_thread.quit()
-
-        if function_name == "智能助手":  # only for demo
-            function_name = "系统功能"
+        self.react_agent_thread.quit()
 
         config = self.page_mapping.get(function_name)
         if function_name != "知识库":
@@ -384,6 +398,12 @@ class MainWin(QWidget):
                 if hasattr(bottom_widget, "switch_init"):
                     bottom_widget.switch_init(function_name)
 
+                # Show/hide agent mode button
+                if function_name == "AI Agent":
+                    self.input_field.show_agent_mode_button()
+                else:
+                    self.input_field.hide_agent_mode_button()
+
                 self.function_menu_btn.show()
                 self.new_dialog_btn.show()
 
@@ -400,7 +420,7 @@ class MainWin(QWidget):
             self.input_field.set_send_button_status(True)
 
         match function_name:
-            case "智能助手":
+            case "智能问答":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = ChatTask()
             case "AI PPT":
@@ -462,7 +482,7 @@ class MainWin(QWidget):
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TABLE, font_size=12, user_send=False)
             elif self.current_func == "AI 绘画":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
-            elif self.current_func == "系统功能":
+            elif self.current_func == "AI Agent":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             else:
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
@@ -493,7 +513,7 @@ class MainWin(QWidget):
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.TABLE, font_size=12, user_send=False)
             elif self.current_func == "AI 绘画":
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
-            elif self.current_func == "系统功能":
+            elif self.current_func == "AI Agent":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, need_button=False, user_send=False)
             else:
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
@@ -610,13 +630,17 @@ class MainWin(QWidget):
             # 当有对话时，隐藏背景logo
             self.chat_intro.hide()
 
-        if self.current_func == "系统功能":
+        if self.current_func == "AI Agent":
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
-            self.agent_thread.start()
-            # Start the agent controller workflow
-            QMetaObject.invokeMethod(self.agent_controller, "start_workflow", Qt.QueuedConnection,
-                                     Q_ARG(str, full_message))
+            if self.current_agent_mode == "react":
+                self.react_agent_thread.start()
+                QMetaObject.invokeMethod(self.react_agent_controller, "start_workflow",
+                                         Qt.QueuedConnection, Q_ARG(str, full_message))
+            else:
+                self.agent_thread.start()
+                QMetaObject.invokeMethod(self.agent_controller, "start_workflow",
+                                         Qt.QueuedConnection, Q_ARG(str, full_message))
             return
 
         # For all other functions, maintain the original logic
@@ -714,7 +738,7 @@ class MainWin(QWidget):
 
     def shift2home_page(self):
         self.set_chat_mode()
-        self.handle_function_selection("智能助手")
+        self.handle_function_selection("智能问答")
 
     # Speech Start
     def listeningToWaiting(self):  # 聆听中到等待中的自动转换函数
@@ -873,6 +897,7 @@ class MainWin(QWidget):
         """传入模型名，如Qwen-Max、DeepSeek-V3，非中文名"""
         self.current_model = model
         self.agent_controller.switch_model(model)
+        self.react_agent_controller.switch_model(model)
         self.sendTask.assistant.switch_model(model)
 
     def handle_gen_ppt(self,full_path):
