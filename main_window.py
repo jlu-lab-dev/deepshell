@@ -342,6 +342,9 @@ class MainWin(QWidget):
         self.agent_thread.quit()
         self.react_agent_thread.quit()
 
+        # 切换功能前保存当前对话
+        self._save_current_conversation()
+
         config = self.page_mapping.get(function_name)
         if function_name != "知识库":
             self.title_change_requested.emit(function_name)
@@ -630,6 +633,20 @@ class MainWin(QWidget):
             # 当有对话时，隐藏背景logo
             self.chat_intro.hide()
 
+        # 首次发消息时：创建数据库会话记录并设置标题
+        if hasattr(self, 'conversation_repo') and self.conversation_repo:
+            conv = self.conversation_repo.get_conversation(self.sendTask.assistant.session_id)
+            if not conv:
+                # 首次发消息，创建数据库记录
+                self.conversation_repo.create_conversation(
+                    self.sendTask.assistant.session_id,
+                    self.current_model,
+                    self.current_func
+                )
+                # 用第一条消息前20字作为标题
+                title = user_input[:20] + ("..." if len(user_input) > 20 else "")
+                self.conversation_repo.update_title(self.sendTask.assistant.session_id, title)
+
         if self.current_func == "AI Agent":
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
@@ -684,6 +701,9 @@ class MainWin(QWidget):
 
     # 新建对话处理逻辑（清空旧的ChatTask+新建新的ChatTask）
     def new_dialog_handle(self):
+        # 先保存当前对话（防止中途切换导致消息未持久化）
+        self._save_current_conversation()
+
         # 清理旧的ChatTask
         if self.sendTask.isRunning():
             self.sendTask.stop()
@@ -691,10 +711,23 @@ class MainWin(QWidget):
             self.current_bubble_message = None
             self.input_field.set_send_button_status(True)
 
+        # 清空内存中的历史（使用前保存）
+        prev_session_id = self.sendTask.assistant.session_id
+        if hasattr(self, 'conversation_repo') and self.conversation_repo:
+            mm = self.sendTask.assistant.model_manager
+            if prev_session_id in mm.memory:
+                mm.memory[prev_session_id].clear()
+
         # 创建新的ChatTask
         self.sendTask = ChatTask()  # 新实例化一个Assistant
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
+
+        # 懒加载 ConversationRepository 并注入 ModelManager
+        if not hasattr(self, 'conversation_repo'):
+            from database.repository.conversation_repository import ConversationRepository
+            self.conversation_repo = ConversationRepository()
+        self.sendTask.assistant.model_manager.set_conversation_repo(self.conversation_repo)
 
         # 重置界面
         self.workflow_step_widgets.clear()
@@ -707,6 +740,92 @@ class MainWin(QWidget):
         self.model_select_btn.set_current_model("DeepSeek-V3")
         self.voice_message = ""
         logging.info(f'新建对话会话ID：{self.sendTask.assistant.session_id}')
+
+    def _save_current_conversation(self):
+        """将当前对话的内存历史写入数据库（增量写入，避免重复）"""
+        if not hasattr(self, 'conversation_repo') or not self.conversation_repo:
+            return
+        session_id = self.sendTask.assistant.session_id
+        mm = self.sendTask.assistant.model_manager
+        history = mm.memory.get(session_id)
+        if not history or not history.messages:
+            return
+        # 检查 DB 中是否已有该会话记录
+        conv = self.conversation_repo.get_conversation(session_id)
+        if not conv:
+            return
+        # 比较 DB 和内存的消息数量，仅追加差量
+        db_messages = self.conversation_repo.get_messages(session_id)
+        db_count = len(db_messages)
+        mem_messages = history.messages
+        if len(mem_messages) > db_count:
+            for msg in mem_messages[db_count:]:
+                role = "user" if msg.type == "human" else "assistant"
+                self.conversation_repo.add_message(session_id, role, msg.content)
+        self.conversation_repo.update_timestamp(session_id)
+
+    def open_history_conversation(self, conversation_id: str):
+        """打开历史对话，恢复上下文"""
+        # 1. 加载会话元数据
+        conv = self.conversation_repo.get_conversation(conversation_id)
+        if not conv:
+            return
+
+        # 2. 先保存当前对话
+        self._save_current_conversation()
+
+        # 3. 停止当前任务
+        if self.sendTask.isRunning():
+            self.sendTask.stop()
+            self.show_waiting_message(False)
+            self.current_bubble_message = None
+
+        # 4. 切换到对应功能页面
+        self.handle_function_selection(conv.function_type)
+
+        # 5. 切换模型
+        if conv.model_name:
+            self.switch_model(conv.model_name)
+
+        # 6. 创建新的 ChatTask，复用原有 session_id
+        self.sendTask = ChatTask()
+        self.sendTask.assistant.session_id = conversation_id
+        self.sendTask.assistant.model_manager.set_conversation_repo(self.conversation_repo)
+        self.sendTask.complete_signal.connect(self.ai_callback)
+        self.sendTask.update_signal.connect(self.update_ai_message)
+
+        # 7. 从 DB 加载历史消息到内存
+        db_messages = self.conversation_repo.get_messages(conversation_id)
+        mm = self.sendTask.assistant.model_manager
+        history = mm.get_session_history(conversation_id)
+        for msg in db_messages:
+            if msg.role == "user":
+                history.add_user_message(msg.content)
+            elif msg.role == "assistant":
+                history.add_ai_message(msg.content)
+
+        # 8. 清空 UI，重新渲染历史气泡
+        self.workflow_step_widgets.clear()
+        self.current_workflow_container = None
+        self.chat_box.clearLayout()
+        for msg in db_messages:
+            bubble = BubbleMessage(msg.content, '', MessageType.TEXT,
+                                 font_size=12, user_send=(msg.role == "user"))
+            self.chat_box.add_message_item(bubble)
+
+        # 9. 确保 chat_box 显示在界面上
+        self.chat_intro.hide()
+        self.chat_box.show()
+        if self.contentStackWgt.indexOf(self.chat_box) == -1:
+            self.contentStackWgt.addWidget(self.chat_box)
+        self.contentStackWgt.setCurrentWidget(self.chat_box)
+        self.input_field.show()
+        self.model_select_btn.set_current_model(conv.model_name or "DeepSeek-V3")
+
+        # 10. 更新标题
+        self.title_change_requested.emit(conv.title)
+
+        logging.info(f'恢复历史对话会话ID：{conversation_id}')
 
     def update_selected_kb(self, selected_kb_id_list):
         self.selected_kb_id_list = selected_kb_id_list

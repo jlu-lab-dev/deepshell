@@ -21,6 +21,7 @@ class ModelManager:
         self.models: Dict[str, Any] = {}
         self.memory: Dict[str, BaseChatMessageHistory] = {}
         self.config_manager = ConfigManager()
+        self.conversation_repo = None  # 懒加载，由 main_window 注入
         self.load_model_config()
 
     def load_model_config(self):
@@ -98,6 +99,10 @@ class ModelManager:
             
         return result
     
+    def set_conversation_repo(self, repo):
+        """由 main_window 注入 ConversationRepository"""
+        self.conversation_repo = repo
+
     def _get_chat_stream(self, model_name: str, messages: List[str], system_prompt: str = None, session_id: str = 'default'):
         """Common method to set up model, prepare messages and get response stream
         
@@ -146,25 +151,40 @@ class ModelManager:
     
     def chat_stream(self, model_name: str, messages: List[str], system_prompt: str = None, session_id: str = 'default', ) -> Generator[str, None, None]:
         """Generate streaming response using specified model
-        
+
         Args:
             model_name: Name of the model to use
             messages: List of message strings
             session_id: Identifier for the conversation session
             system_prompt: Optional system prompt to add at the beginning
-            
+
         Yields:
             Chunks of the response as they are generated
         """
         response_stream = self._get_chat_stream(model_name, messages, system_prompt, session_id)
-        
+
         # Build the full response as we stream (for history)
         full_response = ""
-        
+
         for chunk in response_stream:
             chunk_text = chunk.content
             full_response += chunk_text
             yield chunk_text
+
+        # 流结束后将本次对话消息追加写入数据库
+        if self.conversation_repo and session_id:
+            self._persist_stream_messages(session_id)
+
+    def _persist_stream_messages(self, conversation_id: str):
+        """将内存中最新一轮的消息（user + assistant）追加写入数据库"""
+        history = self.memory.get(conversation_id)
+        if not history or not history.messages:
+            return
+        last_msgs = history.messages[-2:]  # 取最后2条（user + assistant）
+        for msg in last_msgs:
+            role = "user" if msg.type == "human" else "assistant"
+            self.conversation_repo.add_message(conversation_id, role, msg.content)
+        self.conversation_repo.update_timestamp(conversation_id)
 
 
 if __name__ == "__main__":

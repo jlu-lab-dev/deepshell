@@ -28,6 +28,8 @@ class ShadowWindow(QWidget):
         
         self.fullscreen_window = None
 
+        self.history_dialog = None  # 历史对话对话框（懒加载）
+
         self.grip_size = 8
         self._is_resizing = False
         self._resize_grip = None
@@ -120,7 +122,7 @@ class ShadowWindow(QWidget):
         self.action_light.triggered.connect(lambda: self.theme_manager.set_theme('light'))
         theme_menu.addAction(self.action_dark)
         theme_menu.addAction(self.action_light)
-        menu.addAction("历史对话", self.show_config_page)
+        menu.addAction("历史对话", self.show_history_dialog)
         menu.addAction("模型配置", self.show_config_page)
         menu.addAction("记忆管理", self.show_config_page)
         menu.addSeparator()
@@ -367,6 +369,17 @@ class ShadowWindow(QWidget):
         self.configPage.show()
         self.configPage.raise_()
         self.configPage.move_to_center()
+
+    def show_history_dialog(self):
+        """显示历史对话对话框"""
+        if self.history_dialog is None:
+            from ui.page.history_dialog import HistoryDialog
+            self.history_dialog = HistoryDialog(self)
+            self.history_dialog.conversation_selected.connect(self.mainwin.open_history_conversation)
+        self.history_dialog.load_conversations()
+        self.history_dialog.show()
+        self.history_dialog.raise_()
+        self.history_dialog.move_to_center()
 
     def show_about_page(self):
         self.aboutPage.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog | Qt.WindowStaysOnTopHint)
