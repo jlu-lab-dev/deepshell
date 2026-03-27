@@ -8,7 +8,7 @@ class FunctionMenu(QWidget):
 
     def __init__(self,parent=None):
         super().__init__(parent)
-        self.setFixedSize(432, 432)
+        self.setFixedSize(348, 432)
         self.setAttribute(Qt.WA_StyledBackground)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup)
         # self.setAttribute(Qt.WA_TranslucentBackground)
@@ -35,30 +35,19 @@ class FunctionMenu(QWidget):
 
         # 定义按钮数据（文本，图标路径）
         buttons = [
-            ("智能助手", "ui/icon/DeepShell/icon_DeepShell_智能助手.png"),
+            ("智能问答", "ui/icon/DeepShell/icon_DeepShell_智能助手.png"),
+            ("AI Agent", "ui/icon/DeepShell/icon_DeepShell_系统功能.png"),
             ("语种翻译", "ui/icon/DeepShell/icon_DeepShell_语种翻译.png"),
             ("AI 识图", "ui/icon/DeepShell/icon_DeepShell_AI识图.png"),
             ("知识库", "ui/icon/DeepShell/icon_DeepShell_知识库.png"),
-            # ("系统功能", "ui/icon/DeepShell/icon_DeepShell_系统功能.png"),
             ("AI PPT", "ui/icon/DeepShell/icon_DeepShell_AI_PPT.png"),
             ("AI 表格", "ui/icon/DeepShell/icon_DeepShell_AI表格.png"),
             ("会议记录", "ui/icon/DeepShell/icon_DeepShell_会议记录.png"),
             ("思维导图", "ui/icon/DeepShell/icon_DeepShell_思维导图.png"),
-
-            # ("智能问答", "ui/icon/icon_首页_切换_智能问答.png"),
-            # ("AI PPT", "ui/icon/icon_首页_切换_AI_PPT.png"),
-            # ("语种翻译", "ui/icon/icon_首页_切换_语种翻译.png"),
-            # ("AI 识图", "ui/icon/icon_首页_切换_OCR识图.png"),
-            # ("文档分析", "ui/icon/icon_首页_切换_文档分析.png"),
-            # ("知识库", "ui/icon/icon_首页_切换_知识库.png"),
-            # ("AI 表格", "ui/icon/icon_首页_切换_AI表格.png"),
-            # ("会议记录", "ui/icon/icon_首页_切换_会议记录.png"),
-            # ("思维导图", "ui/icon/icon_首页_切换_思维导图.png"),
-            # ("音频转写", "ui/icon/icon_首页_切换_音频转写.png")
         ]
 
         # 创建并添加按钮
-        positions = [(i // 4, i % 4) for i in range(8)] + [(2, 0), (2, 1)]
+        positions = [(i // 3, i % 3) for i in range(9)]
         for (text, icon), pos in zip(buttons, positions):
             widget = self.create_button(text, icon, pos)
             grid.addWidget(widget, *pos)

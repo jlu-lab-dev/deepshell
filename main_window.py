@@ -185,7 +185,7 @@ class MainWin(QWidget):
 
         # 功能组件映射
         self.page_mapping = {
-            "智能助手": {
+            "智能问答": {
                 "main": self.chat_intro,
                 "chat": self.chat_box,
                 "bottom": self.input_field
@@ -236,15 +236,10 @@ class MainWin(QWidget):
             "语音聊天": {
                 "main": self.speech_page
             },
-            # "系统功能": {
-            #     "main": self.sys_func_intro,
-            #     "chat": self.chat_box,
-            #     "bottom": self.input_field,
-            # },
-            "系统功能": {  # only for demo
-                "main": self.chat_intro,
+            "AI Agent": {
+                "main": self.sys_func_intro,
                 "chat": self.chat_box,
-                "bottom": self.input_field
+                "bottom": self.input_field,
             },
         }
 
@@ -253,7 +248,7 @@ class MainWin(QWidget):
         self.current_model = "DeepSeek-V3"
         self.current_input = None    # string
         self.current_bubble_message = None
-        self.current_func = "智能助手"
+        self.current_func = "智能问答"
 
         # knowledge base setting
         self.selected_kb_id_list = []
@@ -324,9 +319,6 @@ class MainWin(QWidget):
         """集中处理功能切换时的UI"""
         self.sendTask.stop_flag = True
         self.agent_thread.quit()
-
-        if function_name == "智能助手":  # only for demo
-            function_name = "系统功能"
 
         config = self.page_mapping.get(function_name)
         if function_name != "知识库":
@@ -400,7 +392,7 @@ class MainWin(QWidget):
             self.input_field.set_send_button_status(True)
 
         match function_name:
-            case "智能助手":
+            case "智能问答":
                 self.mode = AssistantMode.CHAT
                 self.sendTask = ChatTask()
             case "AI PPT":
@@ -462,7 +454,7 @@ class MainWin(QWidget):
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TABLE, font_size=12, user_send=False)
             elif self.current_func == "AI 绘画":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
-            elif self.current_func == "系统功能":
+            elif self.current_func == "AI Agent":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             else:
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
@@ -493,7 +485,7 @@ class MainWin(QWidget):
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.TABLE, font_size=12, user_send=False)
             elif self.current_func == "AI 绘画":
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.IMAGE, font_size=12, user_send=False)
-            elif self.current_func == "系统功能":
+            elif self.current_func == "AI Agent":
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, need_button=False, user_send=False)
             else:
                 bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
@@ -610,7 +602,7 @@ class MainWin(QWidget):
             # 当有对话时，隐藏背景logo
             self.chat_intro.hide()
 
-        if self.current_func == "系统功能":
+        if self.current_func == "AI Agent":
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
             self.agent_thread.start()
@@ -714,7 +706,7 @@ class MainWin(QWidget):
 
     def shift2home_page(self):
         self.set_chat_mode()
-        self.handle_function_selection("智能助手")
+        self.handle_function_selection("智能问答")
 
     # Speech Start
     def listeningToWaiting(self):  # 聆听中到等待中的自动转换函数

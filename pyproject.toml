@@ -33,11 +33,11 @@ dependencies = [
     "PyQt5-sip==12.17.0",
     "markdown==3.7",
     "unstructured>=0.17.2",
-    "openai-whisper==20240930",
     "ffmpeg-python==0.2.0",
     "xmind-sdk",
     "python-pptx==1.0.2",
     "protobuf==3.20.3",
+    "openai-whisper>=20250625",
 ]
 
 [dependency-groups]
