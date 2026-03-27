@@ -14,6 +14,7 @@ from translation.select_botton import language_select_layout
 from ai_audio.audio_tool import AudioProcessor
 from ocr.ocr_text import TextProcessor
 from ui.button.websearch_button import WebSearchButton
+from ui.button.agent_mode_button import AgentModeButton
 from ui.file_thumbnail import HorizontalThumbnailScrollArea
 from utils.document_loader import DocumentProcessor
 from ui.theme_manager import ThemeManager
@@ -23,6 +24,7 @@ class InputField(QFrame):
     capture_voice_signal = pyqtSignal()
     send_signal = pyqtSignal(str, str, list)
     websearch_signal = pyqtSignal(bool)
+    agent_mode_signal = pyqtSignal(str)  # 'pipeline' or 'react'
 
     def __init__(self):
         super().__init__()
@@ -111,10 +113,16 @@ class InputField(QFrame):
         input_layout.addWidget(self.input_text_edit)
         input_layout.addWidget(self.zoom_button, alignment=Qt.AlignTop)
 
+        # Agent 模式切换按钮（仅 AI Agent 功能下显示）
+        self.agent_mode_button = AgentModeButton()
+        self.agent_mode_button.mode_changed.connect(self.agent_mode_signal)
+        self.agent_mode_button.hide()
+
         # 按钮布局
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.microphone_button)
         button_layout.addWidget(self.websearch_button)
+        button_layout.addWidget(self.agent_mode_button)
         #文本翻译的layout
         self.language_layout=language_select_layout()
         button_layout.addLayout(self.language_layout)
@@ -285,15 +293,24 @@ class InputField(QFrame):
             except:
                 logging.error(f"无法加载图片: {current_image}")
 
-    def show_language_select_layout(self,layout):
+    def show_language_select_layout(self, layout):
         for i in range(layout.count()):
             widget = layout.itemAt(i).widget()
             widget.show()
 
-    def hide_language_select_layout(self,layout):
+    def hide_language_select_layout(self, layout):
         for i in range(layout.count()):
             widget = layout.itemAt(i).widget()
             widget.hide()
+
+    def show_agent_mode_button(self):
+        """Show the Pipeline/ReAct toggle (used when AI Agent function is active)."""
+        self.agent_mode_button.show()
+
+    def hide_agent_mode_button(self):
+        """Hide the toggle (used for all other functions)."""
+        self.agent_mode_button.hide()
+        self.agent_mode_button.reset()
 
     def extract_file_path(self, url):
         """从 file:// URL 中提取文件路径并转换为标准路径"""

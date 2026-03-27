@@ -47,7 +47,7 @@ class ShadowWindow(QWidget):
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
 
         self.theme_manager.theme_changed.connect(self.on_theme_changed)
-        self.mainwin.handle_function_selection("智能助手")
+        self.mainwin.handle_function_selection("智能问答")
 
     def init_ui(self):
         self.setWindowTitle(ConfigManager().app_config['name'])
@@ -78,7 +78,7 @@ class ShadowWindow(QWidget):
             color: #FFFFFF;
         """)
         self.middle_label.setAlignment(Qt.AlignCenter)
-        self.middle_label.setText("智能助手")
+        self.middle_label.setText("智能问答")
         self.middle_label.hide()
 
         # 语音按钮
@@ -375,15 +375,15 @@ class ShadowWindow(QWidget):
         self.aboutPage.show()
 
     def change_title_midlabel(self, text):
-        if text == "系统功能": text = "智能助手"
-        if text == "智能助手":
+        if text == "系统功能": text = "智能问答"
+        if text == "智能问答":
             pass
         else:
             self.middle_label.setText(text.upper())
             self.middle_label.show()
 
     def icon_clicked_event(self):
-        self.mainwin.handle_function_selection("智能助手")
+        self.mainwin.handle_function_selection("智能问答")
         self.middle_label.hide()
 
     def main_window_close(self):
