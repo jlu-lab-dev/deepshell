@@ -1,5 +1,6 @@
 # model_manager.py
 
+import logging
 from typing import Dict, Any, List, Generator
 from langchain_community.chat_models import ChatTongyi, ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
@@ -171,19 +172,39 @@ class ModelManager:
             full_response += chunk_text
             yield chunk_text
 
+        # RunnableWithMessageHistory 在流式模式下不会自动将 AI 回复写入 InMemoryChatMessageHistory，
+        # 需要手动补充，否则 _persist_stream_messages 读不到 AI 消息
+        if full_response:
+            history = self.get_session_history(session_id)
+            history.add_ai_message(full_response)
+
         # 流结束后将本次对话消息追加写入数据库
         if self.conversation_repo and session_id:
             self._persist_stream_messages(session_id)
 
     def _persist_stream_messages(self, conversation_id: str):
-        """将内存中最新一轮的消息（user + assistant）追加写入数据库"""
+        """将内存中最新一轮的消息（user + assistant）追加写入数据库（增量写入，跳过 system，清理前缀）"""
         history = self.memory.get(conversation_id)
         if not history or not history.messages:
             return
-        last_msgs = history.messages[-2:]  # 取最后2条（user + assistant）
-        for msg in last_msgs:
-            role = "user" if msg.type == "human" else "assistant"
-            self.conversation_repo.add_message(conversation_id, role, msg.content)
+        # 只持久化 user/assistant 消息，跳过 system 消息
+        msgs_to_save = [m for m in history.messages if m.type in ("human", "ai")]
+        if not msgs_to_save:
+            return
+        # 增量写入：只写数据库中还没有的消息
+        existing = self.conversation_repo.get_messages(conversation_id)
+        existing_count = len(existing)
+        logging.info(f"[_persist] session={conversation_id[:8]}.. memory_msgs={len(msgs_to_save)} db_msgs={existing_count}")
+        if len(msgs_to_save) > existing_count:
+            for msg in msgs_to_save[existing_count:]:
+                role = "user" if msg.type == "human" else "assistant"
+                content = msg.content
+                if role == "user" and content.startswith("用户输入："):
+                    content = content[len("用户输入："):]
+                    if content.endswith('\n'):
+                        content = content[:-1]
+                logging.info(f"[_persist]   -> writing role={role}, content_len={len(content)}")
+                self.conversation_repo.add_message(conversation_id, role, content)
         self.conversation_repo.update_timestamp(conversation_id)
 
 

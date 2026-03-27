@@ -169,8 +169,7 @@ class HistoryDialog(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
-        painter.setPen(QColor(0, 0, 0, 10))
+        painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(45, 45, 48))  # 深色背景 #2D2D30
         painter.drawRoundedRect(self.rect(), 15, 15)
 
@@ -320,7 +319,6 @@ class _ConversationItem(QWidget):
         title_label.setStyleSheet("color: #E0E0E0; font-size: 14px; font-weight: 500;")
         title_label.setMaximumWidth(320)
         title_label.setWordWrap(False)
-        title_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         meta_label = QLabel()
         created = self.conversation.created_at

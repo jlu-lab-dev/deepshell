@@ -177,6 +177,6 @@ if __name__ == "__main__":
         assistant.rag_manager.add_document("../rag/test.txt")
         # print(assistant.rag_manager.get_document_count())
         print(assistant.chat(["吉林大学"]))
-        # print(assistant.chat(["你知道方德吗"]))
+        # print(assistant.chat(["你知道DeepShell吗"]))
     # test_assistant_and_session()
     test_rag()

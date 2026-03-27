@@ -3,6 +3,7 @@
 import logging
 import re
 import datetime
+import json
 import PyQt5.sip as sip
 
 from PyQt5.QtCore import Qt, QTimer, QThread, QMetaObject, Q_ARG, pyqtSignal
@@ -44,7 +45,7 @@ from server_check import ServerCheck
 from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
 from ui.button.model_select_button import ModelSelectButton
 from ui.chat.bubble_message import BubbleMessage, MessageType, ThumbnailMessage, ButtonMessage, \
-    WorkflowContainerMessage
+    WorkflowContainerMessage, AgentHistoryWidget
 from ui.chat.chat_box import ChatBox
 from ui.page.speech_page import SpeechPage
 from ui.button.function_menu_button import FunctionMenuButton
@@ -303,6 +304,9 @@ class MainWin(QWidget):
         # A dictionary to hold references to workflow step widgets
         self.workflow_step_widgets = {}
         self.current_workflow_container = None
+
+        # Agent 工作流步骤数据收集（用于持久化到数据库）
+        self._agent_steps = []
 
         # Connect AgentController signals
         # For simple chats (fallback)
@@ -580,6 +584,14 @@ class MainWin(QWidget):
         # 存储这个步骤的引用，以便后续更新
         self.workflow_step_widgets[step_id] = step_widget
 
+        # 收集步骤数据（用于持久化）
+        self._agent_steps.append({
+            'step_id': step_id,
+            'text': text,
+            'success': False,
+            'message': text
+        })
+
     def handle_workflow_step_finished(self, step_id: str, success: bool, message: str):
         """Finds an existing step widget and updates it to its 'finished' state."""
         step_widget = self.workflow_step_widgets.get(step_id)
@@ -592,11 +604,34 @@ class MainWin(QWidget):
             # You could add a simple text bubble here as a fallback if you want
             # self.add_bubble_message(final_message, user_send=False)
 
+        # 更新已收集步骤中的对应数据
+        for step in self._agent_steps:
+            if step['step_id'] == step_id:
+                step['success'] = success
+                step['message'] = message
+                break
+
     def handle_agent_finished(self, final_message):
         """Receives Agent successful completion signal."""
         self.input_field.set_send_button_status(True)
         self.current_workflow_container = None  # 重置容器
-        # self.add_bubble_message(f"<b>✅ {final_message}</b>", user_send=False)
+
+        # 将 Agent 工作流步骤持久化到数据库
+        if hasattr(self, 'conversation_repo') and self.conversation_repo and self._agent_steps:
+            agent_mode = getattr(self, 'current_agent_mode', 'pipeline')
+            workflow_content = json.dumps({
+                'type': 'agent_workflow',
+                'mode': agent_mode,
+                'final_result': final_message,
+                'steps': self._agent_steps
+            }, ensure_ascii=False)
+            session_id = self.sendTask.assistant.session_id
+            self.conversation_repo.add_message(session_id, 'assistant', workflow_content)
+            self.conversation_repo.update_timestamp(session_id)
+            logging.info(f"[agent_persist] Saved {len(self._agent_steps)} steps for session={session_id[:8]}..")
+
+        # 清空步骤收集器
+        self._agent_steps = []
 
     def handle_agent_error(self, error_message):
         """Receives Agent error signal."""
@@ -634,20 +669,30 @@ class MainWin(QWidget):
             self.chat_intro.hide()
 
         # 首次发消息时：创建数据库会话记录并设置标题
-        if hasattr(self, 'conversation_repo') and self.conversation_repo:
-            conv = self.conversation_repo.get_conversation(self.sendTask.assistant.session_id)
-            if not conv:
-                # 首次发消息，创建数据库记录
-                self.conversation_repo.create_conversation(
-                    self.sendTask.assistant.session_id,
-                    self.current_model,
-                    self.current_func
-                )
-                # 用第一条消息前20字作为标题
-                title = user_input[:20] + ("..." if len(user_input) > 20 else "")
-                self.conversation_repo.update_title(self.sendTask.assistant.session_id, title)
+        if not hasattr(self, 'conversation_repo') or not self.conversation_repo:
+            from database.repository.conversation_repository import ConversationRepository
+            self.conversation_repo = ConversationRepository()
+            self.sendTask.assistant.model_manager.set_conversation_repo(self.conversation_repo)
+        conv = self.conversation_repo.get_conversation(self.sendTask.assistant.session_id)
+        if not conv:
+            # 首次发消息，创建数据库记录
+            self.conversation_repo.create_conversation(
+                self.sendTask.assistant.session_id,
+                self.current_model,
+                self.current_func
+            )
+            # 用第一条消息前20字作为标题
+            title = user_input[:20] + ("..." if len(user_input) > 20 else "")
+            self.conversation_repo.update_title(self.sendTask.assistant.session_id, title)
 
         if self.current_func == "AI Agent":
+            # 开始新的 Agent 工作流前清空步骤收集器
+            self._agent_steps.clear()
+
+            # 保存用户消息到数据库（因为 Agent 分支提前 return，不会走 chat_stream 的持久化逻辑）
+            session_id = self.sendTask.assistant.session_id
+            self.conversation_repo.add_message(session_id, "user", user_input)
+
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
             if self.current_agent_mode == "react":
@@ -742,30 +787,75 @@ class MainWin(QWidget):
         logging.info(f'新建对话会话ID：{self.sendTask.assistant.session_id}')
 
     def _save_current_conversation(self):
-        """将当前对话的内存历史写入数据库（增量写入，避免重复）"""
+        """将当前对话的内存历史写入数据库（增量写入，过滤 system，清理前缀）"""
         if not hasattr(self, 'conversation_repo') or not self.conversation_repo:
             return
         session_id = self.sendTask.assistant.session_id
         mm = self.sendTask.assistant.model_manager
         history = mm.memory.get(session_id)
         if not history or not history.messages:
+            # 即使内存中没有消息，也检查是否有未完成的 Agent 工作流需要保存
+            self._save_incomplete_agent_workflow(session_id)
             return
         # 检查 DB 中是否已有该会话记录
         conv = self.conversation_repo.get_conversation(session_id)
         if not conv:
             return
-        # 比较 DB 和内存的消息数量，仅追加差量
+        # 只比较 user/assistant 消息，跳过 system 消息
+        mem_msgs = [m for m in history.messages if m.type in ("human", "ai")]
+        if not mem_msgs:
+            self._save_incomplete_agent_workflow(session_id)
+            return
         db_messages = self.conversation_repo.get_messages(session_id)
         db_count = len(db_messages)
-        mem_messages = history.messages
-        if len(mem_messages) > db_count:
-            for msg in mem_messages[db_count:]:
+        logging.info(f"[_save_conv] session={session_id[:8]}.. memory_msgs={len(mem_msgs)} db_msgs={db_count}")
+        if len(mem_msgs) > db_count:
+            for msg in mem_msgs[db_count:]:
                 role = "user" if msg.type == "human" else "assistant"
-                self.conversation_repo.add_message(session_id, role, msg.content)
+                content = msg.content
+                if role == "user" and content.startswith("用户输入："):
+                    content = content[len("用户输入："):]
+                    if content.endswith('\n'):
+                        content = content[:-1]
+                logging.info(f"[_save_conv]   -> writing role={role}, content_len={len(content)}")
+                self.conversation_repo.add_message(session_id, role, content)
+
+        # 保存未完成的 Agent 工作流（如果有）
+        self._save_incomplete_agent_workflow(session_id)
+
         self.conversation_repo.update_timestamp(session_id)
+
+    def _save_incomplete_agent_workflow(self, session_id: str):
+        """保存尚未完成的 Agent 工作流步骤（切换功能/新建对话时调用）"""
+        if not hasattr(self, '_agent_steps') or not self._agent_steps:
+            return
+        conv = self.conversation_repo.get_conversation(session_id)
+        if not conv:
+            return
+        # 检查是否已经有 agent workflow 消息（避免重复保存）
+        db_messages = self.conversation_repo.get_messages(session_id)
+        for msg in db_messages:
+            if msg.role == "assistant" and '"agent_workflow"' in msg.content:
+                return  # 已有工作流消息，不重复保存
+        # 保存未完成的工作流
+        agent_mode = getattr(self, 'current_agent_mode', 'pipeline')
+        workflow_content = json.dumps({
+            'type': 'agent_workflow',
+            'mode': agent_mode,
+            'final_result': '（工作流被中断）',
+            'steps': self._agent_steps
+        }, ensure_ascii=False)
+        self.conversation_repo.add_message(session_id, 'assistant', workflow_content)
+        logging.info(f"[_save_incomplete_agent] Saved {len(self._agent_steps)} steps for interrupted workflow")
+        self._agent_steps.clear()
 
     def open_history_conversation(self, conversation_id: str):
         """打开历史对话，恢复上下文"""
+        # 懒加载 ConversationRepository（首次打开历史时可能尚未初始化）
+        if not hasattr(self, 'conversation_repo') or not self.conversation_repo:
+            from database.repository.conversation_repository import ConversationRepository
+            self.conversation_repo = ConversationRepository()
+
         # 1. 加载会话元数据
         conv = self.conversation_repo.get_conversation(conversation_id)
         if not conv:
@@ -798,17 +888,40 @@ class MainWin(QWidget):
         db_messages = self.conversation_repo.get_messages(conversation_id)
         mm = self.sendTask.assistant.model_manager
         history = mm.get_session_history(conversation_id)
+        history.clear()  # 确保内存历史是干净的
         for msg in db_messages:
             if msg.role == "user":
                 history.add_user_message(msg.content)
             elif msg.role == "assistant":
                 history.add_ai_message(msg.content)
 
-        # 8. 清空 UI，重新渲染历史气泡
+        logging.info(f"[restore] db_messages count={len(db_messages)}, roles={[m.role for m in db_messages]}")
+        for msg in db_messages:
+            logging.info(f"[restore]   role={msg.role}, content_preview={msg.content[:30]!r}")
+        # 8. 清空 UI，重新渲染历史气泡（跳过 system 消息）
         self.workflow_step_widgets.clear()
         self.current_workflow_container = None
+        self._agent_steps.clear()
         self.chat_box.clearLayout()
         for msg in db_messages:
+            if msg.role not in ("user", "assistant"):
+                continue  # 跳过 system 等角色
+
+            # 检测 Agent 工作流 JSON 格式
+            if msg.role == "assistant" and msg.content.startswith('{"type": "agent_workflow"'):
+                try:
+                    data = json.loads(msg.content)
+                    if data.get('type') == 'agent_workflow':
+                        agent_mode = data.get('mode', 'pipeline')
+                        final_result = data.get('final_result', '')
+                        steps = data.get('steps', [])
+                        widget = AgentHistoryWidget(final_result, steps, agent_mode)
+                        self.chat_box.add_message_item(widget)
+                        continue
+                except (json.JSONDecodeError, KeyError):
+                    pass  # JSON 解析失败，按普通消息渲染
+
+            # 普通消息用 BubbleMessage 渲染
             bubble = BubbleMessage(msg.content, '', MessageType.TEXT,
                                  font_size=12, user_send=(msg.role == "user"))
             self.chat_box.add_message_item(bubble)
@@ -822,8 +935,22 @@ class MainWin(QWidget):
         self.input_field.show()
         self.model_select_btn.set_current_model(conv.model_name or "DeepSeek-V3")
 
-        # 10. 更新标题
-        self.title_change_requested.emit(conv.title)
+        # 10. 恢复 Agent 模式（从工作流数据中检测）
+        if conv.function_type == "AI Agent":
+            for msg in db_messages:
+                if msg.role == "assistant" and msg.content.startswith('{"type": "agent_workflow"'):
+                    try:
+                        data = json.loads(msg.content)
+                        restored_mode = data.get('mode', 'pipeline')
+                        self.current_agent_mode = restored_mode
+                        # 同步 UI 上的 agent 模式按钮状态
+                        self.input_field.agent_mode_button.set_mode(restored_mode)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+                    break
+
+        # 11. 更新标题（显示功能名称，与正常使用时一致）
+        self.title_change_requested.emit(conv.function_type)
 
         logging.info(f'恢复历史对话会话ID：{conversation_id}')
 

@@ -35,7 +35,7 @@ class SysFuncIntro(QWidget):
         self.logo_label.setAlignment(Qt.AlignCenter)
 
         # 介绍文字
-        self.welcome_label = QLabel("系统功能")
+        self.welcome_label = QLabel("AI Agent")
         self.welcome_label.setStyleSheet("""
                     font-family: Microsoft YaHei;
                     font-weight: 400;

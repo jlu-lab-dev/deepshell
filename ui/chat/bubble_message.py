@@ -724,3 +724,178 @@ class ButtonMessage(QWidget):
     def set_clickable(self, clickable):
         self.button.setEnabled(clickable)
 
+
+class AgentHistoryWidget(QWidget):
+    """
+    用于从历史记录恢复 Agent 工作流的专用 Widget。
+    参考主流 Agent 对话窗口的设计风格：
+    - 折叠/展开的推理过程
+    - 每个步骤带状态图标
+    - 最终结果展示
+    """
+    delete_signal = pyqtSignal(QWidget)
+
+    def __init__(self, final_result: str, steps: list, agent_mode: str = "pipeline", parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+        self._expanded = False
+        self._steps = steps
+        self._agent_mode = agent_mode
+
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addSpacing(12)
+
+        # 顶部行：Logo + 内容
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(8)
+
+        # AI Logo
+        ai_logo = QLabel(self)
+        ai_logo.setPixmap(
+            QPixmap(ConfigManager().app_config['logo']).scaled(
+                30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+        ai_logo.setFixedSize(30, 30)
+        logo_col = QVBoxLayout()
+        logo_col.addWidget(ai_logo, alignment=Qt.AlignTop)
+
+        # 右侧内容区
+        content_col = QVBoxLayout()
+        content_col.setSpacing(4)
+        content_col.setContentsMargins(0, 0, 0, 0)
+
+        # Agent 模式标签
+        mode_label = QLabel(f"{agent_mode.upper()} Agent")
+        mode_font = QFont('Microsoft YaHei', 11)
+        mode_font.setWeight(QFont.Bold)
+        mode_label.setFont(mode_font)
+        mode_label.setStyleSheet("color: #8c8c8c; padding-bottom: 4px;")
+        content_col.addWidget(mode_label)
+
+        # 可折叠的步骤区域
+        if steps:
+            self._toggle_btn = QPushButton(f"▶ 查看推理过程（{len(steps)} 步）")
+            self._toggle_btn.setFixedHeight(30)
+            self._toggle_btn.setCursor(Qt.PointingHandCursor)
+            self._toggle_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: 1px solid #4A4A4A;
+                    border-radius: 6px;
+                    color: #e2e8f0;
+                    font-size: 12px;
+                    padding: 2px 10px;
+                    text-align: left;
+                }
+                QPushButton:hover {
+                    background-color: #3C3C3C;
+                    border: 1px solid #e2e8f0;
+                }
+            """)
+            self._toggle_btn.clicked.connect(self._toggle_expand)
+            content_col.addWidget(self._toggle_btn)
+
+            # 步骤容器（默认隐藏）
+            self._steps_container = QWidget()
+            self._steps_container.setStyleSheet("background: transparent;")
+            steps_layout = QVBoxLayout(self._steps_container)
+            steps_layout.setContentsMargins(0, 6, 0, 0)
+            steps_layout.setSpacing(3)
+
+            for step in steps:
+                step_w = self._create_step_widget(step)
+                steps_layout.addWidget(step_w)
+
+            self._steps_container.hide()
+            content_col.addWidget(self._steps_container)
+
+        # 最终结果区域
+        result_container = QWidget()
+        result_container.setStyleSheet("background: transparent;")
+        result_layout = QVBoxLayout(result_container)
+        result_layout.setContentsMargins(0, 8, 0, 0)
+        result_layout.setSpacing(4)
+
+        result_header = QLabel("最终结果")
+        result_header.setFont(QFont('Microsoft YaHei', 11, QFont.Bold))
+        result_header.setStyleSheet("color: #e2e8f0;")
+        result_layout.addWidget(result_header)
+
+        result_text = QLabel(final_result)
+        result_text.setWordWrap(True)
+        result_text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        result_text.setFont(QFont('Microsoft YaHei', 12))
+        result_text.setStyleSheet("color: #e2e8f0; padding: 4px 0px;")
+        result_layout.addWidget(result_text)
+
+        content_col.addWidget(result_container)
+
+        top_row.addLayout(logo_col)
+        top_row.addLayout(content_col, 1)
+        top_row.addStretch()
+
+        main_layout.addLayout(top_row)
+
+    def _create_step_widget(self, step: dict) -> QWidget:
+        """创建单个步骤的 Widget"""
+        step_widget = QWidget()
+        step_widget.setStyleSheet("background: transparent;")
+
+        layout = QHBoxLayout(step_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        # 状态图标
+        icon_label = QLabel()
+        success = step.get('success', True)
+        if success:
+            icon_label.setPixmap(
+                QPixmap("ui/icon/DeepShell/success.png").scaled(
+                    16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        else:
+            icon_label.setPixmap(
+                QPixmap("ui/icon/DeepShell/failure.png").scaled(
+                    16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        icon_label.setFixedSize(16, 16)
+
+        # 步骤文本
+        text = step.get('message', step.get('text', ''))
+        text_label = QLabel(text)
+        text_label.setWordWrap(True)
+        text_label.setFont(QFont('Microsoft YaHei', 11))
+        color = "#8c8c8c" if success else "#ca7d7d"
+        text_label.setStyleSheet(f"color: {color}; padding-left: 4px;")
+        text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        # 步骤ID标签（如 "第1轮"）
+        step_id = step.get('step_id', '')
+        id_label = QLabel()
+        id_label.setFixedWidth(0)
+        if 'react_think' in step_id or 'react_action' in step_id:
+            # ReAct 模式：显示轮次
+            round_num = step_id.split('_')[-1] if '_' in step_id else ''
+            action_type = "思考" if 'think' in step_id else "执行"
+            id_label.setText(f"[{action_type} {round_num}]")
+
+        layout.addWidget(icon_label)
+        layout.addWidget(id_label)
+        layout.addWidget(text_label, 1)
+
+        return step_widget
+
+    def _toggle_expand(self):
+        """切换展开/折叠状态"""
+        self._expanded = not self._expanded
+        if self._expanded:
+            self._steps_container.show()
+            self._toggle_btn.setText(f"▼ 收起推理过程（{len(self._steps)} 步）")
+        else:
+            self._steps_container.hide()
+            self._toggle_btn.setText(f"▶ 查看推理过程（{len(self._steps)} 步）")
+

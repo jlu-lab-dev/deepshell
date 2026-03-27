@@ -92,3 +92,14 @@ class AgentModeButton(QPushButton):
             self.name_label.setText("Pipeline")
             self.name_label.style().unpolish(self.name_label)
             self.name_label.style().polish(self.name_label)
+
+    def set_mode(self, mode: str):
+        """Set the agent mode directly (no signal emitted)."""
+        if mode not in (PIPELINE_MODE, REACT_MODE):
+            return
+        if self._mode == mode:
+            return
+        self._mode = mode
+        self.name_label.setText("ReAct" if mode == REACT_MODE else "Pipeline")
+        self.name_label.style().unpolish(self.name_label)
+        self.name_label.style().polish(self.name_label)

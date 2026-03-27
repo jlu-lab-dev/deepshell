@@ -67,7 +67,7 @@ class SpeechPage(QWidget):
 
         self.textLabel = QLabel(self)
         self.textLabel.setText('''
-        <p style="font-size: 16px; font-weight: bold;  color: #D3D3D3;padding: 0px; ">欢迎使用方德AI语音助手<p/>
+        <p style="font-size: 16px; font-weight: bold;  color: #D3D3D3;padding: 0px; ">欢迎使用DeepShell语音助手<p/>
         <p style="font-size: 16px; font-weight: bold;  color: #D3D3D3;padding: 0px; ">可以点击下方按钮唤醒<p/>
         ''')
         self.textLabel.setAlignment(Qt.AlignCenter)
@@ -154,7 +154,7 @@ class SpeechPage(QWidget):
                         }  
             """)
             self.textLabel.setText('''
-            <p style="font-size: 16px; font-weight: bold;  color: #D3D3D3;padding: 0px; ">欢迎使用方德AI语音助手<p/>
+            <p style="font-size: 16px; font-weight: bold;  color: #D3D3D3;padding: 0px; ">欢迎使用DeepShell语音助手<p/>
             <p style="font-size: 16px; font-weight: bold;  color: #D3D3D3;padding: 0px; ">可以点击下方按钮唤醒<p/>
             ''')
             h = self.height - 380
@@ -170,7 +170,7 @@ class SpeechPage(QWidget):
                         }  
             """)
             self.textLabel.setText('''
-            <p style="font-size: 16px; font-weight: bold;  color: black;padding: 0px; ">欢迎使用方德AI语音助手<p/>
+            <p style="font-size: 16px; font-weight: bold;  color: black;padding: 0px; ">欢迎使用DeepShell语音助手<p/>
             <p style="font-size: 16px; font-weight: bold;  color: black;padding: 0px; ">可以点击下方按钮唤醒<p/>
             ''')
             self.setFixedHeight(560)

@@ -321,7 +321,6 @@ class ShadowWindow(QWidget):
                             self.height() - 2 * self.grip_size),
         }
 
-    # ... (其余所有辅助函数保持不变) ...
     def switch2speech(self):
         if self.mainwin.speech_page.isHidden():
             self.mainwin.handle_function_selection("语音聊天")
