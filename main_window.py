@@ -338,7 +338,7 @@ class MainWin(QWidget):
         self.react_agent_thread.start()
 
         # Agent mode: 'pipeline' or 'react'
-        self.current_agent_mode = "pipeline"
+        self.current_agent_mode = "react"
         self.input_field.agent_mode_signal.connect(self._on_agent_mode_changed)
 
     def _on_agent_mode_changed(self, mode: str):
@@ -416,7 +416,7 @@ class MainWin(QWidget):
                     self.current_agent_mode = self.input_field.agent_mode_button.current_mode()
                 else:
                     self.input_field.hide_agent_mode_button()
-                    self.current_agent_mode = "pipeline"
+                    self.current_agent_mode = "react"
 
                 self.function_menu_btn.show()
                 self.new_dialog_btn.show()
@@ -626,7 +626,7 @@ class MainWin(QWidget):
         # 将 Agent 工作流步骤持久化到数据库
         if hasattr(self, 'conversation_repo') and self.conversation_repo:
             session_id = self.sendTask.assistant.session_id
-            agent_mode = getattr(self, 'current_agent_mode', 'pipeline')
+            agent_mode = getattr(self, 'current_agent_mode', 'react')
 
             # 从 ReActAgentController 取出推理链
             if agent_mode == "react":
@@ -873,7 +873,7 @@ class MainWin(QWidget):
                 if data.get("type") == "agent_workflow":
                     return  # 已有工作流消息，不重复保存
         # 保存未完成的工作流
-        agent_mode = getattr(self, 'current_agent_mode', 'pipeline')
+        agent_mode = getattr(self, 'current_agent_mode', 'react')
         if agent_mode == "react":
             self._react_thought_chain = list(
                 getattr(self.react_agent_controller, '_thought_chain', [])
@@ -957,7 +957,7 @@ class MainWin(QWidget):
 
             if msg_type == "agent_workflow":
                 # Agent 工作流 → AgentHistoryWidget
-                agent_mode = data.get("mode", "pipeline")
+                agent_mode = data.get("mode", "react")
                 final_result = data.get("final_result", "")
                 steps = data.get("steps", [])
                 thought_chain = data.get("thought_chain")
@@ -996,7 +996,7 @@ class MainWin(QWidget):
             for msg in db_messages:
                 data = parse_message_content(msg.content)
                 if data.get("type") == "agent_workflow":
-                    restored_mode = data.get("mode", "pipeline")
+                    restored_mode = data.get("mode", "react")
                     self.current_agent_mode = restored_mode
                     self.input_field.agent_mode_button.set_mode(restored_mode)
                     if restored_mode == "react":
