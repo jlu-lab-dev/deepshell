@@ -74,7 +74,8 @@ class ReActAgent:
     """
 
     def __init__(self, model_name: str, tool_schemas: list, function_map: dict,
-                 step_cb, obs_cb, final_cb, error_cb, stop_flag):
+                 step_cb, obs_cb, final_cb, error_cb, stop_flag,
+                 thought_chain_collector=None):
         self.model_name = model_name
         self.tool_schemas = tool_schemas
         self.function_map = function_map
@@ -83,6 +84,7 @@ class ReActAgent:
         self.final_cb = final_cb
         self.error_cb = error_cb
         self.stop_flag = stop_flag
+        self.thought_chain_collector = thought_chain_collector
 
         self.model_manager = ModelManager()
         self._load_prompt()
@@ -129,6 +131,15 @@ class ReActAgent:
                 # Extract thought text (everything before Final Answer:)
                 thought_text = re.split(r'Final Answer\s*:', response)[0].strip()
                 self.obs_cb(step_id, True, thought_text or "推理完成")
+                # ── 收集推理链：Final Answer 分支 ──
+                if self.thought_chain_collector:
+                    self.thought_chain_collector({
+                        "iteration": iteration,
+                        "thought": thought_text or response.strip(),
+                        "action": None,
+                        "observation": thought_text or "推理完成",
+                        "success": True,
+                    })
                 self.final_cb(final_answer)
                 return
 
@@ -139,6 +150,15 @@ class ReActAgent:
 
             if action is None:
                 # No action and no final answer — treat whole response as final answer
+                # ── 收集推理链：无 Action 分支 ──
+                if self.thought_chain_collector:
+                    self.thought_chain_collector({
+                        "iteration": iteration,
+                        "thought": thought_part or response.strip(),
+                        "action": None,
+                        "observation": response.strip(),
+                        "success": True,
+                    })
                 self.final_cb(response.strip())
                 return
 
@@ -155,6 +175,15 @@ class ReActAgent:
             if tool_name not in self.function_map:
                 obs_text = f"错误：工具 '{tool_name}' 不存在"
                 self.obs_cb(act_step_id, False, obs_text)
+                # ── 收集推理链：工具不存在 ──
+                if self.thought_chain_collector:
+                    self.thought_chain_collector({
+                        "iteration": iteration,
+                        "thought": thought_part or response.strip(),
+                        "action": action,
+                        "observation": obs_text,
+                        "success": False,
+                    })
                 self.error_cb(obs_text)
                 return
 
@@ -163,6 +192,15 @@ class ReActAgent:
             except Exception as e:
                 obs_text = f"工具执行异常: {e}"
                 self.obs_cb(act_step_id, False, obs_text)
+                # ── 收集推理链：工具执行异常 ──
+                if self.thought_chain_collector:
+                    self.thought_chain_collector({
+                        "iteration": iteration,
+                        "thought": thought_part or response.strip(),
+                        "action": action,
+                        "observation": obs_text,
+                        "success": False,
+                    })
                 self.error_cb(obs_text)
                 return
 
@@ -171,8 +209,27 @@ class ReActAgent:
             self.obs_cb(act_step_id, success, obs_message)
 
             if not success:
+                # ── 收集推理链：工具执行失败 ──
+                if self.thought_chain_collector:
+                    self.thought_chain_collector({
+                        "iteration": iteration,
+                        "thought": thought_part or response.strip(),
+                        "action": action,
+                        "observation": obs_message,
+                        "success": False,
+                    })
                 self.error_cb(f"工具 '{tool_name}' 执行失败: {obs_message}")
                 return
+
+            # ── 收集推理链：工具执行成功 ──
+            if self.thought_chain_collector:
+                self.thought_chain_collector({
+                    "iteration": iteration,
+                    "thought": thought_part or response.strip(),
+                    "action": action,
+                    "observation": obs_message,
+                    "success": True,
+                })
 
             # ── Append to conversation for next iteration ─────────────────
             # Simulate multi-turn: append assistant response + observation as next user message
@@ -236,6 +293,7 @@ class ReActAgentController(QObject):
         super().__init__()
         self.model_name = model
         self._worker: _ReActWorker | None = None
+        self._thought_chain: list = []
 
         # Load all tools from experts.json (same approach as AgentController)
         self._tool_schemas, self._function_map = self._load_all_tools()
@@ -278,6 +336,11 @@ class ReActAgentController(QObject):
             self._worker.stop()
             self._worker.wait()
 
+        self._thought_chain = []
+
+        def collect_thought(entry: dict):
+            self._thought_chain.append(entry)
+
         agent = ReActAgent(
             model_name=self.model_name,
             tool_schemas=self._tool_schemas,
@@ -287,6 +350,7 @@ class ReActAgentController(QObject):
             final_cb=lambda ans: None,
             error_cb=lambda msg: None,
             stop_flag=lambda: False,
+            thought_chain_collector=collect_thought,
         )
 
         self._worker = _ReActWorker(agent, user_input)

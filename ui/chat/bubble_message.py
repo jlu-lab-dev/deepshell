@@ -735,12 +735,14 @@ class AgentHistoryWidget(QWidget):
     """
     delete_signal = pyqtSignal(QWidget)
 
-    def __init__(self, final_result: str, steps: list, agent_mode: str = "pipeline", parent=None):
+    def __init__(self, final_result: str, steps: list, agent_mode: str = "pipeline",
+                 thought_chain: list = None, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
         self._expanded = False
         self._steps = steps
         self._agent_mode = agent_mode
+        self._thought_chain = thought_chain or []
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -882,6 +884,18 @@ class AgentHistoryWidget(QWidget):
             round_num = step_id.split('_')[-1] if '_' in step_id else ''
             action_type = "思考" if 'think' in step_id else "执行"
             id_label.setText(f"[{action_type} {round_num}]")
+
+            # ReAct 模式：为 "思考" 步骤添加 thought tooltip
+            if self._thought_chain and 'react_think' in step_id:
+                try:
+                    iteration_num = int(round_num)
+                    if iteration_num <= len(self._thought_chain):
+                        entry = self._thought_chain[iteration_num - 1]
+                        thought = entry.get("thought", "")
+                        if thought:
+                            text_label.setToolTip(thought)
+                except (ValueError, IndexError):
+                    pass
 
         layout.addWidget(icon_label)
         layout.addWidget(id_label)

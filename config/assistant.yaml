@@ -470,7 +470,7 @@ react_agent:
 
     收到 Observation 后，继续推理并输出 Final Answer：
     Thought: 计算器已成功打开，任务完成。
-    Final Answer: 好的，计算器已经为您打开了！
+    Final Answer: ，计好的算器已经为您打开了！
 
     【重要约束】
     - Action 必须是合法的单行 JSON，不要使用代码块包裹。

@@ -13,6 +13,7 @@ from langchain_core.chat_history import (
 )
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from utils.decorators import singleton
+from chat.message_helpers import make_text_message
 from langchain.chat_models.base import BaseChatModel
 
 
@@ -198,12 +199,14 @@ class ModelManager:
         if len(msgs_to_save) > existing_count:
             for msg in msgs_to_save[existing_count:]:
                 role = "user" if msg.type == "human" else "assistant"
-                content = msg.content
-                if role == "user" and content.startswith("用户输入："):
-                    content = content[len("用户输入："):]
-                    if content.endswith('\n'):
-                        content = content[:-1]
-                logging.info(f"[_persist]   -> writing role={role}, content_len={len(content)}")
+                raw_content = msg.content
+                if role == "user" and raw_content.startswith("用户输入："):
+                    raw_content = raw_content[len("用户输入："):]
+                    if raw_content.endswith('\n'):
+                        raw_content = raw_content[:-1]
+                # 统一包裹为 JSON 格式
+                content = make_text_message(role, raw_content)
+                logging.info(f"[_persist]   -> writing role={role}, content_len={len(content)}, text_preview={raw_content[:20]!r}")
                 self.conversation_repo.add_message(conversation_id, role, content)
         self.conversation_repo.update_timestamp(conversation_id)
 

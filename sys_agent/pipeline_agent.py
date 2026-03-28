@@ -32,8 +32,25 @@ class ChiefPlannerTask(ChatTask):
 
 
 def extract_json_from_string(text: str) -> str | None:
+    """Extract the first valid JSON object or array from text."""
+    # Try non-greedy first (handles LLM returning duplicate JSON objects)
+    match = re.search(r'({.*?}|\[.*?\])', text, re.DOTALL)
+    if match:
+        candidate = match.group(0)
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+    # Fallback: greedy match (handles nested JSON)
     match = re.search(r'({.*}|\[.*\])', text, re.DOTALL)
-    if match: return match.group(0)
+    if match:
+        candidate = match.group(0)
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
     return None
 
 
