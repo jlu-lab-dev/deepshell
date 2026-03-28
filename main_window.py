@@ -28,7 +28,7 @@ from ppt.intro_ui import PPTIntroPage
 from ppt.workflow.ppt_task import PPTTask
 from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 from sys_agent.intro_ui import SysFuncIntro
-from sys_agent.agent_controller import AgentController
+from sys_agent.pipeline_agent import PipelineAgent
 from sys_agent.react_agent import ReActAgentController
 from translation.intro_ui import TranslateIntroPage
 from translation.translate_task import TranslateTask
@@ -298,7 +298,7 @@ class MainWin(QWidget):
 
         # --- Agent Controller Setup ---
         self.agent_thread = QThread()
-        self.agent_controller = AgentController(self.current_model)
+        self.agent_controller = PipelineAgent(self.current_model)
         self.agent_controller.moveToThread(self.agent_thread)
 
         # A dictionary to hold references to workflow step widgets

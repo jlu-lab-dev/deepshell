@@ -8,7 +8,27 @@ import importlib
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, pyqtSlot
 
 from chat.chat_task import ChatTask
-from sys_agent.agent_task import ProjectManagerTask, ExpertToolRecommenderTask, ChiefPlannerTask
+
+
+class ProjectManagerTask(ChatTask):
+    """项目经理，负责选择专家团队"""
+    def __init__(self):
+        # 对应 prompts/project_manager.yaml
+        super().__init__(assistant_type='project_manager')
+
+
+class ExpertToolRecommenderTask(ChatTask):
+    """领域专家，负责推荐自己领域内的工具"""
+    def __init__(self):
+        # 对应 prompts/expert_tool_recommender.yaml
+        super().__init__(assistant_type='expert_tool_recommender')
+
+
+class ChiefPlannerTask(ChatTask):
+    """总规划师，负责制定最终的跨领域工作流"""
+    def __init__(self):
+        # 对应 prompts/chief_planner.yaml
+        super().__init__(assistant_type='chief_planner')
 
 
 def extract_json_from_string(text: str) -> str | None:
@@ -17,7 +37,7 @@ def extract_json_from_string(text: str) -> str | None:
     return None
 
 
-class AgentController(QObject):
+class PipelineAgent(QObject):
     # For simple fallback chats
     normal_update_signal = pyqtSignal(str)
     normal_finished_signal = pyqtSignal(str)
@@ -291,3 +311,5 @@ class AgentController(QObject):
         self.expert_task.assistant.switch_model(model)
         self.planner_task.assistant.switch_model(model)
         self.fallback_chat_task.assistant.switch_model(model)
+
+
