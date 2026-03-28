@@ -44,7 +44,7 @@ class SysFuncIntro(QWidget):
                     background: transparent;
                 """)
         self.welcome_label.setWordWrap(True)
-        self.welcome_label.setFixedSize(QSize(200, 19))
+        self.welcome_label.setFixedSize(QSize(200, 30))
         self.welcome_label.setAlignment(Qt.AlignCenter)
 
         self.intro_label = QLabel("DeepShell是与操作系统深度绑定的智能体，能够从用户的自然语言中识别出需求，调用系统功能，提供服务。")

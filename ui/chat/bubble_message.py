@@ -770,14 +770,6 @@ class AgentHistoryWidget(QWidget):
         content_col.setSpacing(4)
         content_col.setContentsMargins(0, 0, 0, 0)
 
-        # Agent 模式标签
-        mode_label = QLabel(f"{agent_mode.upper()} Agent")
-        mode_font = QFont('Microsoft YaHei', 11)
-        mode_font.setWeight(QFont.Bold)
-        mode_label.setFont(mode_font)
-        mode_label.setStyleSheet("color: #8c8c8c; padding-bottom: 4px;")
-        content_col.addWidget(mode_label)
-
         # 可折叠的步骤区域
         if steps:
             self._toggle_btn = QPushButton(f"▶ 查看推理过程（{len(steps)} 步）")
