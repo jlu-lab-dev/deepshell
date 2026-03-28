@@ -24,7 +24,6 @@ class InputField(QFrame):
     capture_voice_signal = pyqtSignal()
     send_signal = pyqtSignal(str, str, list)
     websearch_signal = pyqtSignal(bool)
-    agent_mode_signal = pyqtSignal(str)  # 'pipeline' or 'react'
 
     def __init__(self):
         super().__init__()
@@ -113,9 +112,8 @@ class InputField(QFrame):
         input_layout.addWidget(self.input_text_edit)
         input_layout.addWidget(self.zoom_button, alignment=Qt.AlignTop)
 
-        # Agent 模式切换按钮（仅 AI Agent 功能下显示）
+        # Agent 模式指示按钮（仅 AI Agent 功能下显示）
         self.agent_mode_button = AgentModeButton()
-        self.agent_mode_button.mode_changed.connect(self.agent_mode_signal)
         self.agent_mode_button.hide()
 
         # 按钮布局
@@ -304,13 +302,12 @@ class InputField(QFrame):
             widget.hide()
 
     def show_agent_mode_button(self):
-        """Show the Pipeline/ReAct toggle (used when AI Agent function is active)."""
+        """Show the ReAct mode indicator (used when AI Agent function is active)."""
         self.agent_mode_button.show()
 
     def hide_agent_mode_button(self):
-        """Hide the toggle (used for all other functions)."""
+        """Hide the indicator (used for all other functions)."""
         self.agent_mode_button.hide()
-        self.agent_mode_button.reset()
 
     def extract_file_path(self, url):
         """从 file:// URL 中提取文件路径并转换为标准路径"""

@@ -27,7 +27,6 @@ from ppt.intro_ui import PPTIntroPage
 from ppt.workflow.ppt_task import PPTTask
 from ppt.makePPTByTemplate.mdtojson import PPTGenerator
 from sys_agent.intro_ui import SysFuncIntro
-from sys_agent.pipeline_agent import PipelineAgent
 from sys_agent.react_agent import ReActAgentController
 from translation.intro_ui import TranslateIntroPage
 from translation.translate_task import TranslateTask
@@ -259,8 +258,6 @@ class MainWin(QWidget):
         self.selected_kb_id_list = []
 
         # system function setting
-        self.chain_step = 1
-        self.tool_result = []
 
     def func_init(self):
         self.serverCheck = ServerCheck()
@@ -299,9 +296,9 @@ class MainWin(QWidget):
         self.timerSend = QTimer(self)
         self.timerSend.timeout.connect(self.listeningToWaiting)  # "聆听中"到"等待中"的自动转换
 
-        # --- Agent Controller Setup ---
+        # Agent Controller Setup (ReAct only)
         self.agent_thread = QThread()
-        self.agent_controller = PipelineAgent(self.current_model)
+        self.agent_controller = ReActAgentController(self.current_model)
         self.agent_controller.moveToThread(self.agent_thread)
 
         # A dictionary to hold references to workflow step widgets
@@ -313,10 +310,8 @@ class MainWin(QWidget):
         self._react_thought_chain = []  # ReAct 推理链收集器
 
         # Connect AgentController signals
-        # For simple chats (fallback)
-        self.agent_controller.normal_update_signal.connect(self.update_ai_message)
-        self.agent_controller.normal_finished_signal.connect(self.ai_callback)
-        # For complex workflows
+        # For simple chats (fallback) — ReAct doesn't have normal_update_signal,
+        # but we still wire it through the same handlers for consistency
         self.agent_controller.workflow_step_started.connect(self.handle_workflow_step_started)
         self.agent_controller.workflow_step_finished.connect(self.handle_workflow_step_finished)
         self.agent_controller.finished_signal.connect(self.handle_agent_finished)
@@ -324,31 +319,10 @@ class MainWin(QWidget):
 
         self.agent_thread.start()
 
-        # --- ReAct Agent Controller Setup ---
-        self.react_agent_thread = QThread()
-        self.react_agent_controller = ReActAgentController(self.current_model)
-        self.react_agent_controller.moveToThread(self.react_agent_thread)
-
-        # Connect ReActAgentController signals — same handlers as AgentController
-        self.react_agent_controller.workflow_step_started.connect(self.handle_workflow_step_started)
-        self.react_agent_controller.workflow_step_finished.connect(self.handle_workflow_step_finished)
-        self.react_agent_controller.finished_signal.connect(self.handle_agent_finished)
-        self.react_agent_controller.error_signal.connect(self.handle_agent_error)
-
-        self.react_agent_thread.start()
-
-        # Agent mode: 'pipeline' or 'react'
-        self.current_agent_mode = "react"
-        self.input_field.agent_mode_signal.connect(self._on_agent_mode_changed)
-
-    def _on_agent_mode_changed(self, mode: str):
-        self.current_agent_mode = mode
-
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
         self.sendTask.stop_flag = True
         self.agent_thread.quit()
-        self.react_agent_thread.quit()
 
         # 切换功能前保存当前对话
         self._save_current_conversation()
@@ -409,14 +383,11 @@ class MainWin(QWidget):
                 if hasattr(bottom_widget, "switch_init"):
                     bottom_widget.switch_init(function_name)
 
-                # Show/hide agent mode button
+                # Show/hide ReAct mode indicator button
                 if function_name == "AI Agent":
                     self.input_field.show_agent_mode_button()
-                    # 同步 current_agent_mode 与按钮状态（按钮可能被 reset 过）
-                    self.current_agent_mode = self.input_field.agent_mode_button.current_mode()
                 else:
                     self.input_field.hide_agent_mode_button()
-                    self.current_agent_mode = "react"
 
                 self.function_menu_btn.show()
                 self.new_dialog_btn.show()
@@ -626,28 +597,24 @@ class MainWin(QWidget):
         # 将 Agent 工作流步骤持久化到数据库
         if hasattr(self, 'conversation_repo') and self.conversation_repo:
             session_id = self.sendTask.assistant.session_id
-            agent_mode = getattr(self, 'current_agent_mode', 'react')
 
             # 从 ReActAgentController 取出推理链
-            if agent_mode == "react":
-                self._react_thought_chain = list(
-                    getattr(self.react_agent_controller, '_thought_chain', [])
-                )
+            self._react_thought_chain = list(
+                getattr(self.agent_controller, '_thought_chain', [])
+            )
 
             if self._agent_steps or self._react_thought_chain:
                 workflow_content = make_agent_workflow_message(
                     role="assistant",
-                    mode=agent_mode,
+                    mode="react",
                     final_result=final_message,
                     steps=self._agent_steps,
-                    thought_chain=(
-                        self._react_thought_chain if agent_mode == "react" else None
-                    ),
+                    thought_chain=self._react_thought_chain,
                 )
                 self.conversation_repo.add_message(session_id, 'assistant', workflow_content)
                 self.conversation_repo.update_timestamp(session_id)
                 logging.info(
-                    f"[agent_persist] mode={agent_mode} "
+                    f"[agent_persist] mode=react "
                     f"steps={len(self._agent_steps)} "
                     f"thoughts={len(self._react_thought_chain)} "
                     f"session={session_id[:8]}.."
@@ -723,14 +690,9 @@ class MainWin(QWidget):
 
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
-            if self.current_agent_mode == "react":
-                self.react_agent_thread.start()
-                QMetaObject.invokeMethod(self.react_agent_controller, "start_workflow",
-                                         Qt.QueuedConnection, Q_ARG(str, full_message))
-            else:
-                self.agent_thread.start()
-                QMetaObject.invokeMethod(self.agent_controller, "start_workflow",
-                                         Qt.QueuedConnection, Q_ARG(str, full_message))
+            self.agent_thread.start()
+            QMetaObject.invokeMethod(self.agent_controller, "start_workflow",
+                                     Qt.QueuedConnection, Q_ARG(str, full_message))
             return
 
         # For all other functions, maintain the original logic
@@ -873,19 +835,15 @@ class MainWin(QWidget):
                 if data.get("type") == "agent_workflow":
                     return  # 已有工作流消息，不重复保存
         # 保存未完成的工作流
-        agent_mode = getattr(self, 'current_agent_mode', 'react')
-        if agent_mode == "react":
-            self._react_thought_chain = list(
-                getattr(self.react_agent_controller, '_thought_chain', [])
-            )
+        self._react_thought_chain = list(
+            getattr(self.agent_controller, '_thought_chain', [])
+        )
         workflow_content = make_agent_workflow_message(
             role="assistant",
-            mode=agent_mode,
+            mode="react",
             final_result='（工作流被中断）',
             steps=self._agent_steps,
-            thought_chain=(
-                self._react_thought_chain if agent_mode == "react" else None
-            ),
+            thought_chain=self._react_thought_chain,
         )
         self.conversation_repo.add_message(session_id, 'assistant', workflow_content)
         logging.info(f"[_save_incomplete_agent] Saved {len(self._agent_steps)} steps for interrupted workflow")
@@ -991,16 +949,13 @@ class MainWin(QWidget):
         self.input_field.show()
         self.model_select_btn.set_current_model(conv.model_name or "DeepSeek-V3")
 
-        # 10. 恢复 Agent 模式（从工作流数据中检测）
+        # 10. 恢复 ReAct 推理链（从工作流数据中提取）
         if conv.function_type == "AI Agent":
+            self.input_field.agent_mode_button.set_mode("react")
             for msg in db_messages:
                 data = parse_message_content(msg.content)
                 if data.get("type") == "agent_workflow":
-                    restored_mode = data.get("mode", "react")
-                    self.current_agent_mode = restored_mode
-                    self.input_field.agent_mode_button.set_mode(restored_mode)
-                    if restored_mode == "react":
-                        self._react_thought_chain = data.get("thought_chain", []) or []
+                    self._react_thought_chain = data.get("thought_chain", []) or []
                     break
 
         # 11. 更新标题（显示功能名称，与正常使用时一致）
@@ -1197,7 +1152,6 @@ class MainWin(QWidget):
         """传入模型名，如Qwen-Max、DeepSeek-V3，非中文名"""
         self.current_model = model
         self.agent_controller.switch_model(model)
-        self.react_agent_controller.switch_model(model)
         self.sendTask.assistant.switch_model(model)
 
     def handle_gen_ppt(self,full_path):

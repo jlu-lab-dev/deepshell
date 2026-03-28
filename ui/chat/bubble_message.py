@@ -735,7 +735,7 @@ class AgentHistoryWidget(QWidget):
     """
     delete_signal = pyqtSignal(QWidget)
 
-    def __init__(self, final_result: str, steps: list, agent_mode: str = "pipeline",
+    def __init__(self, final_result: str, steps: list, agent_mode: str = "react",
                  thought_chain: list = None, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
