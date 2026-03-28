@@ -387,12 +387,11 @@ class ShadowWindow(QWidget):
         self.aboutPage.show()
 
     def change_title_midlabel(self, text):
-        if text == "系统功能": text = "智能问答"
         if text == "智能问答":
-            pass
-        else:
-            self.middle_label.setText(text.upper())
-            self.middle_label.show()
+            self.middle_label.hide()
+            return
+        self.middle_label.setText(text.upper())
+        self.middle_label.show()
 
     def icon_clicked_event(self):
         self.mainwin.handle_function_selection("智能问答")

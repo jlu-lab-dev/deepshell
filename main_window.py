@@ -820,10 +820,14 @@ class MainWin(QWidget):
                 logging.info(f"[_save_conv]   -> writing role={role}, content_len={len(content)}")
                 self.conversation_repo.add_message(session_id, role, content)
 
-        # 保存未完成的 Agent 工作流（如果有）
-        self._save_incomplete_agent_workflow(session_id)
+            # 保存未完成的 Agent 工作流（如果有）
+            self._save_incomplete_agent_workflow(session_id)
 
-        self.conversation_repo.update_timestamp(session_id)
+            # 只有实际写入了新消息，才更新时间戳
+            self.conversation_repo.update_timestamp(session_id)
+        else:
+            # 没有新消息写入，仅保存未完成的 Agent 工作流
+            self._save_incomplete_agent_workflow(session_id)
 
     def _save_incomplete_agent_workflow(self, session_id: str):
         """保存尚未完成的 Agent 工作流步骤（切换功能/新建对话时调用）"""
