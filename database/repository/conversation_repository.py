@@ -139,7 +139,6 @@ class ConversationRepository:
                 import json as _json
                 print(f"\n{'='*60}")
                 print(f"[DB READ] conv={conversation_id[:8]}.. | 共 {len(msgs)} 条消息")
-                print(f"{'='*60}")
                 for i, m in enumerate(msgs):
                     print(f"\n--- 消息 #{i+1} | role={m.role} | time={m.created_at} ---")
                     try:

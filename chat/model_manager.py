@@ -119,7 +119,7 @@ class ModelManager:
         Returns:
             Response stream from the model
         """
-        print("_get_chat_stream model_name is " + model_name)
+        print("Using model: " + model_name)
         model = self.get_model(model_name)
         prepared_messages = self._prepare_messages(messages, system_prompt, session_id)
         
@@ -195,7 +195,6 @@ class ModelManager:
             return
         existing = self.conversation_repo.get_messages(conversation_id)
         existing_count = len(existing)
-        logging.info(f"[_persist] session={conversation_id[:8]}.. memory_msgs={len(msgs_to_save)} db_msgs={existing_count}")
         if len(msgs_to_save) > existing_count:
             for msg in msgs_to_save[existing_count:]:
                 role = "user" if msg.type == "human" else "assistant"
@@ -241,7 +240,6 @@ class ModelManager:
                 else:
                     content = make_text_message(role="assistant", user_input=raw_content)
 
-                logging.info(f"[_persist]   -> writing role={role}, content_len={len(content)}, preview={user_input[:20]!r}" if role == "user" else f"[_persist]   -> writing role={role}, preview={raw_content[:20]!r}")
                 self.conversation_repo.add_message(conversation_id, role, content)
         self.conversation_repo.update_timestamp(conversation_id)
 

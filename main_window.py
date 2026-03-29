@@ -169,7 +169,6 @@ class MainWin(QWidget):
         self.input_field = InputField()
         self.input_field.hide()
         self.input_field.send_signal.connect(self.handle_send_message)
-        self.input_field.websearch_signal.connect(self.set_websearch_enabled)
 
         self.meeting_bottom_ui = MeetingBottomWidget()
         self.meeting_bottom_ui.hide()
@@ -394,7 +393,7 @@ class MainWin(QWidget):
                 self.new_dialog_btn.show()
 
                 self.switch_init(function_name)
-                print(f"成功切换到：{function_name}（主组件+底部输入）")
+                print(f"当前功能：{function_name}")
         else:
             print(f"未定义的功能：{function_name}")
 
@@ -631,7 +630,6 @@ class MainWin(QWidget):
                     self.input_field.language_layout.itemAt(0).widget().set_current_language(detected_lang)
                 message = message+"[END]把用户输入翻译成"+self.input_field.language_layout.itemAt(2).widget().current_language
 
-            print("send_quest_to_ai model is" + self.sendTask.assistant.model)
             self.sendTask.set_topic(message)
             self.sendTask.start()
         else:
@@ -1183,10 +1181,6 @@ class MainWin(QWidget):
             self.meetingTask.stop_task()
             self.show_meeting_waiting_message(False)
     # 会议功能 End
-
-    def set_websearch_enabled(self, enabled):
-        if hasattr(self, 'sendTask'):
-            self.sendTask.set_websearch_enabled(enabled)
 
     def switch_model(self, model):
         """传入模型名，如Qwen-Max、DeepSeek-V3，非中文名"""

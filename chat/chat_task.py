@@ -43,7 +43,3 @@ class ChatTask(QThread):
         self.stop_flag = True
         self.quit()  # 调用 QThread 的 quit 方法
         self.wait()  # 等待线程结束
-
-    def set_websearch_enabled(self, enabled):
-        self.assistant.enable_web_search(enabled)
-        print(f"Websearch enabled is {enabled}")

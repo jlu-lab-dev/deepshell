@@ -7,14 +7,13 @@ from typing import Optional, Tuple
 from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
 from rag.rag_manager import RAGManager
-from mcp.websearch.web_search_manager import WebSearchManager
 
 class Assistant:
     def __init__(self, assistant_type: str, session_id: Optional[str] = None):
         self.session_id = session_id or str(uuid.uuid4())
         self.model_manager = ModelManager()
         self.rag_manager = RAGManager()
-        self.web_search_manager = WebSearchManager(is_enabled=False)
+        self.web_search_manager = None
         self._load_assistant_config(assistant_type)
 
     def _load_assistant_config(self, assistant_type: str) -> None:
@@ -34,25 +33,13 @@ class Assistant:
         context_parts = []
         
         logging.info(f"[ASSISTANT] 开始处理查询: '{messages[-1]}'")
-        
+
         # 使用 RAG 模式，将知识库搜索结果注入
         if len(self.kb_list):
             logging.info(f"[ASSISTANT] 使用知识库: {self.kb_list}")
             knowledge = self.rag_manager.get_relevant_context(messages[-1], knowledge_bases=self.kb_list)
             context_parts.append(f"知识库信息：\n{knowledge}")
-        
-        # 检查是否需要网络搜索
-        if self.web_search_manager.is_search_query(messages[-1]):
-            logging.info(f"[ASSISTANT] 查询被识别为需要网络搜索")
-            web_context = self.web_search_manager.get_search_context(messages[-1])
-            if web_context and web_context != "未找到相关的网络搜索结果。":
-                logging.info(f"[ASSISTANT] 网络搜索成功，将结果注入上下文")
-                context_parts.append(f"网络搜索结果：\n{web_context}")
-            else:
-                logging.warning(f"[ASSISTANT] 网络搜索未返回有效结果")
-        else:
-            logging.info(f"[ASSISTANT] 查询未被识别为需要网络搜索")
-        
+
         # 如果有上下文信息，则添加到消息中
         if context_parts:
             context_text = "\n\n".join(context_parts)
@@ -95,18 +82,6 @@ class Assistant:
             else:
                 context_parts = []
                 logging.info(f"[ASSISTANT_STREAM] 知识库未返回有效结果")
-
-        # 检查是否需要网络搜索
-        if self.web_search_manager.is_search_query(messages[-1]):
-            logging.info(f"[ASSISTANT_STREAM] 查询被识别为需要网络搜索")
-            web_context = self.web_search_manager.get_search_context(messages[-1])
-            if web_context and web_context != "未找到相关的网络搜索结果。":
-                logging.info(f"[ASSISTANT_STREAM] 网络搜索成功，将结果注入上下文")
-                context_parts.append(f"网络搜索结果：\n{web_context}")
-            else:
-                logging.warning(f"[ASSISTANT_STREAM] 网络搜索未返回有效结果")
-        else:
-            logging.info(f"[ASSISTANT_STREAM] 查询未被识别为需要网络搜索")
 
         # 如果有上下文信息，则添加到消息中
         if context_parts:
@@ -170,15 +145,6 @@ class Assistant:
 
     def switch_model(self, model_name):
         self.model = model_name
-    
-    def enable_web_search(self, enabled: bool = True):
-        """启用或禁用网络搜索功能"""
-        self.web_search_manager.set_enabled(enabled)
-    
-    def get_web_search_engines(self):
-        """获取可用的搜索引擎列表"""
-        return self.web_search_manager.get_available_engines()
-
 
 if __name__ == "__main__":
     def test_assistant_and_session():

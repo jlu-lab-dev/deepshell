@@ -13,7 +13,6 @@ from speech.voice_recognition import VoiceRecognition
 from translation.select_botton import language_select_layout
 from ai_audio.audio_tool import AudioProcessor
 from ocr.ocr_text import TextProcessor
-from ui.button.websearch_button import WebSearchButton
 from ui.button.agent_mode_button import AgentModeButton
 from ui.file_thumbnail import HorizontalThumbnailScrollArea
 from utils.document_loader import DocumentProcessor
@@ -23,7 +22,6 @@ from ui.theme_manager import ThemeManager
 class InputField(QFrame):
     capture_voice_signal = pyqtSignal()
     send_signal = pyqtSignal(str, str, list)
-    websearch_signal = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
@@ -87,10 +85,6 @@ class InputField(QFrame):
         self.animation_timer = QTimer(self)
         self.animation_timer.timeout.connect(self.update_mic_icon)
 
-        # 联网搜索
-        self.websearch_button = WebSearchButton()
-        self.websearch_button.clicked_signal.connect(self.switch_websearch_enabled)
-
         # 文件上传按钮
         self.upload_file_button = QPushButton()
         upload_file_icon_path = "ui/icon/icon_输入框_附件.png"
@@ -119,7 +113,6 @@ class InputField(QFrame):
         # 按钮布局
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.microphone_button)
-        button_layout.addWidget(self.websearch_button)
         button_layout.addWidget(self.agent_mode_button)
         #文本翻译的layout
         self.language_layout=language_select_layout()
@@ -450,9 +443,6 @@ class InputField(QFrame):
 
     def set_microphone_button_status(self, status):
         self.microphone_button.setEnabled(status)
-
-    def switch_websearch_enabled(self, status):
-        self.websearch_signal.emit(status)
 
     def set_send_button_status(self, status):
         self.send_button.setEnabled(status)
