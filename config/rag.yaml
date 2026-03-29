@@ -3,14 +3,20 @@ vector_db:
   collection_name: "documents"
   persist_directory: "~/.deepshell-ai/chroma_db"
 
-embeddings:
-  type: "dashscope"
+embedding:
+  type: "local"           # "dashscope" | "local"
   model: "text-embedding-v3"
   api_key: "${ALIYUN_API_KEY}"
-  
+  local:
+    model_path: "${EMBEDDING_MODEL_PATH}"
+    model_name: "BAAI/bge-small-zh-v1.5"
+    device: "cpu"                            # "cpu" | "cuda"
+    encode_kwargs:
+      normalize_embeddings: true
+
 chunk_size: 128
 chunk_overlap: 32
-supported_file_types: 
+supported_file_types:
   - ".txt"
   - ".pdf"
   - ".docx"
@@ -21,6 +27,22 @@ feedback:
   type: "aliyun"
   api_key: "${ALIYUN_API_KEY}"
   model_name: "qwen-plus"
-  temperature: 0.7 
+  temperature: 0.7
   max_tokens: 2000
   api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+hybrid_search:
+  enabled: true
+  keyword_weight: 0.3
+  semantic_weight: 0.7
+  score_threshold: 0.3   # 融合分数低于此值的结果将被过滤
+  keyword_top_k: 20      # BM25 预取数量
+  semantic_top_k: 20     # 语义预取数量
+
+memory:
+  compress_enabled: true
+  compress_threshold_rounds: 10   # 超过此轮次触发压缩
+  keep_recent_rounds: 3           # 保留最近 N 轮完整对话
+  compress_model: "DeepSeek-V3"   # 用于生成摘要的模型
+  max_summary_tokens: 500         # 摘要最大字数
+  agent_max_history_chars: 4000   # Agent 历史字符上限

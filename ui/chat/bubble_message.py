@@ -735,12 +735,16 @@ class AgentHistoryWidget(QWidget):
     """
     delete_signal = pyqtSignal(QWidget)
 
-    def __init__(self, final_result: str, steps: list, agent_mode: str = "pipeline", parent=None):
+    def __init__(self, final_result: str, agent_mode: str = "react",
+                 thought_chain: list = None, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
         self._expanded = False
-        self._steps = steps
         self._agent_mode = agent_mode
+        self._thought_chain = thought_chain or []
+
+        # 从 thought_chain 自动生成 steps（用于 UI 展示）
+        self._steps = self._build_steps_from_thought_chain()
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -768,17 +772,9 @@ class AgentHistoryWidget(QWidget):
         content_col.setSpacing(4)
         content_col.setContentsMargins(0, 0, 0, 0)
 
-        # Agent 模式标签
-        mode_label = QLabel(f"{agent_mode.upper()} Agent")
-        mode_font = QFont('Microsoft YaHei', 11)
-        mode_font.setWeight(QFont.Bold)
-        mode_label.setFont(mode_font)
-        mode_label.setStyleSheet("color: #8c8c8c; padding-bottom: 4px;")
-        content_col.addWidget(mode_label)
-
         # 可折叠的步骤区域
-        if steps:
-            self._toggle_btn = QPushButton(f"▶ 查看推理过程（{len(steps)} 步）")
+        if self._steps:
+            self._toggle_btn = QPushButton(f"▶ 查看推理过程（{len(self._steps)} 步）")
             self._toggle_btn.setFixedHeight(30)
             self._toggle_btn.setCursor(Qt.PointingHandCursor)
             self._toggle_btn.setStyleSheet("""
@@ -806,7 +802,7 @@ class AgentHistoryWidget(QWidget):
             steps_layout.setContentsMargins(0, 6, 0, 0)
             steps_layout.setSpacing(3)
 
-            for step in steps:
+            for step in self._steps:
                 step_w = self._create_step_widget(step)
                 steps_layout.addWidget(step_w)
 
@@ -839,6 +835,35 @@ class AgentHistoryWidget(QWidget):
         top_row.addStretch()
 
         main_layout.addLayout(top_row)
+
+    def _build_steps_from_thought_chain(self) -> list:
+        """从 thought_chain 自动生成 steps 列表（用于 UI 展示）。
+        每个 thought_chain 条目生成 1~2 个 step：
+          - 有 action: 生成一个思考 step + 一个执行 step
+          - 无 action: 生成一个思考 step
+        """
+        steps = []
+        for entry in self._thought_chain:
+            iteration = entry.get("iteration", 0)
+            success = entry.get("success", True)
+            action = entry.get("action")
+
+            # 思考步骤
+            steps.append({
+                'step_id': f'react_think_{iteration}',
+                'success': True,
+                'message': entry.get("thought", ""),
+            })
+
+            # 执行步骤（仅当有工具调用时）
+            if action:
+                tool_name = action.get("tool", "unknown")
+                steps.append({
+                    'step_id': f'react_action_{iteration}',
+                    'success': success,
+                    'message': entry.get("observation", ""),
+                })
+        return steps
 
     def _create_step_widget(self, step: dict) -> QWidget:
         """创建单个步骤的 Widget"""
@@ -882,6 +907,18 @@ class AgentHistoryWidget(QWidget):
             round_num = step_id.split('_')[-1] if '_' in step_id else ''
             action_type = "思考" if 'think' in step_id else "执行"
             id_label.setText(f"[{action_type} {round_num}]")
+
+            # ReAct 模式：为 "思考" 步骤添加 thought tooltip
+            if self._thought_chain and 'react_think' in step_id:
+                try:
+                    iteration_num = int(round_num)
+                    if iteration_num <= len(self._thought_chain):
+                        entry = self._thought_chain[iteration_num - 1]
+                        thought = entry.get("thought", "")
+                        if thought:
+                            text_label.setToolTip(thought)
+                except (ValueError, IndexError):
+                    pass
 
         layout.addWidget(icon_label)
         layout.addWidget(id_label)

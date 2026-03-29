@@ -109,6 +109,19 @@ class ConversationRepository:
                 )
                 session.add(msg)
                 session.flush()
+                # ── 调试打印 ──────────────────────────────────────────────
+                import json
+                preview = content[:300] + "..." if len(content) > 300 else content
+                # 尝试解析 JSON，格式化输出更友好
+                try:
+                    parsed = json.loads(content)
+                    preview = json.dumps(parsed, ensure_ascii=False, indent=2)
+                    # if len(preview) > 500:
+                    #     preview = preview[:500] + "\n... (truncated)"
+                except Exception:
+                    pass
+                print(f"\n[DB WRITE] conv={conversation_id[:8]}.. | role={role}\n{preview}\n")
+                # ─────────────────────────────────────────────────────────
                 return msg
             except SQLAlchemyError as e:
                 logging.error(f"Error adding message: {e}")
@@ -118,10 +131,27 @@ class ConversationRepository:
         """获取某会话的所有消息，按 created_at 升序"""
         with self.db_manager.session_scope() as session:
             try:
-                return session.query(Message)\
+                msgs = session.query(Message)\
                     .filter(Message.conversation_id == conversation_id)\
                     .order_by(Message.created_at.asc())\
                     .all()
+                # ── 调试打印 ──────────────────────────────────────────────
+                import json as _json
+                print(f"\n{'='*60}")
+                print(f"[DB READ] conv={conversation_id[:8]}.. | 共 {len(msgs)} 条消息")
+                for i, m in enumerate(msgs):
+                    print(f"\n--- 消息 #{i+1} | role={m.role} | time={m.created_at} ---")
+                    try:
+                        parsed = _json.loads(m.content)
+                        pretty = _json.dumps(parsed, ensure_ascii=False, indent=2)
+                        # if len(pretty) > 600:
+                        #     pretty = pretty[:600] + "\n... (truncated)"
+                    except Exception:
+                        pretty = m.content[:300] + "..." if len(m.content) > 300 else m.content
+                    print(pretty)
+                print(f"\n{'='*60}\n")
+                # ─────────────────────────────────────────────────────────
+                return msgs
             except SQLAlchemyError as e:
                 logging.error(f"Error getting messages: {e}")
                 return []
@@ -134,4 +164,28 @@ class ConversationRepository:
                 return True
             except SQLAlchemyError as e:
                 logging.error(f"Error deleting messages: {e}")
+                return False
+
+    def delete_messages_by_range(self, conversation_id: str, start_id: int, end_id: int) -> bool:
+        """删除某会话指定 id 范围内的消息（包含两端）。"""
+        with self.db_manager.session_scope() as session:
+            try:
+                session.query(Message).filter(
+                    Message.conversation_id == conversation_id,
+                    Message.id >= start_id,
+                    Message.id <= end_id,
+                ).delete(synchronize_session=False)
+                return True
+            except SQLAlchemyError as e:
+                logging.error(f"Error deleting messages by range: {e}")
+                return False
+
+    def delete_message_by_id(self, message_id: int) -> bool:
+        """根据 message id 删除单条消息。"""
+        with self.db_manager.session_scope() as session:
+            try:
+                session.query(Message).filter(Message.id == message_id).delete(synchronize_session=False)
+                return True
+            except SQLAlchemyError as e:
+                logging.error(f"Error deleting message by id: {e}")
                 return False

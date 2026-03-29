@@ -1,24 +1,16 @@
 from PyQt5.QtWidgets import QPushButton, QLabel, QHBoxLayout
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import pyqtSignal, Qt
-
-PIPELINE_MODE = "pipeline"
-REACT_MODE = "react"
+from PyQt5.QtCore import Qt
 
 
 class AgentModeButton(QPushButton):
     """
-    Toggle button that switches between Pipeline and ReAct agent modes.
-    Styled to match WebSearchButton.
-    Emits mode_changed(str) with value 'pipeline' or 'react'.
+    Static indicator button showing 'ReAct' agent mode.
     """
-    mode_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._mode = PIPELINE_MODE
         self._init_ui()
-        self.clicked.connect(self._toggle)
 
     def _init_ui(self):
         self.setObjectName('agent_mode_button')
@@ -48,7 +40,7 @@ class AgentModeButton(QPushButton):
             }
         """)
 
-        self.name_label = QLabel("Pipeline")
+        self.name_label = QLabel("ReAct")
         self.name_label.setStyleSheet("""
             QLabel {
                 font-family: 'Source Han Sans SC';
@@ -68,38 +60,9 @@ class AgentModeButton(QPushButton):
         layout.addWidget(self.name_label, 0, Qt.AlignVCenter)
         self.setLayout(layout)
 
-    def _toggle(self):
-        if self._mode == PIPELINE_MODE:
-            self._mode = REACT_MODE
-            self.name_label.setText("ReAct")
-        else:
-            self._mode = PIPELINE_MODE
-            self.name_label.setText("Pipeline")
-
-        # Force style refresh
-        self.name_label.style().unpolish(self.name_label)
-        self.name_label.style().polish(self.name_label)
-
-        self.mode_changed.emit(self._mode)
-
     def current_mode(self) -> str:
-        return self._mode
-
-    def reset(self):
-        """Reset to Pipeline mode (e.g. when switching functions)."""
-        if self._mode != PIPELINE_MODE:
-            self._mode = PIPELINE_MODE
-            self.name_label.setText("Pipeline")
-            self.name_label.style().unpolish(self.name_label)
-            self.name_label.style().polish(self.name_label)
+        return "react"
 
     def set_mode(self, mode: str):
-        """Set the agent mode directly (no signal emitted)."""
-        if mode not in (PIPELINE_MODE, REACT_MODE):
-            return
-        if self._mode == mode:
-            return
-        self._mode = mode
-        self.name_label.setText("ReAct" if mode == REACT_MODE else "Pipeline")
-        self.name_label.style().unpolish(self.name_label)
-        self.name_label.style().polish(self.name_label)
+        """Kept for API compatibility — always displays 'ReAct'."""
+        pass
