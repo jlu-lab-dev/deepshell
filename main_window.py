@@ -54,6 +54,7 @@ from config.config_manager import ConfigManager
 from chat.message_helpers import (
     is_json_message, parse_message_content, get_text_content,
     make_text_message, make_agent_workflow_message,
+    make_agent_memory_message,
 )
 
 
@@ -305,9 +306,8 @@ class MainWin(QWidget):
         self.workflow_step_widgets = {}
         self.current_workflow_container = None
 
-        # Agent 工作流步骤数据收集（用于持久化到数据库）
-        self._agent_steps = []
-        self._react_thought_chain = []  # ReAct 推理链收集器
+        # Agent 工作流推理链收集器
+        self._react_thought_chain = []
 
         # Connect AgentController signals
         # For simple chats (fallback) — ReAct doesn't have normal_update_signal,
@@ -562,14 +562,6 @@ class MainWin(QWidget):
         # 存储这个步骤的引用，以便后续更新
         self.workflow_step_widgets[step_id] = step_widget
 
-        # 收集步骤数据（用于持久化）
-        self._agent_steps.append({
-            'step_id': step_id,
-            'text': text,
-            'success': False,
-            'message': text
-        })
-
     def handle_workflow_step_finished(self, step_id: str, success: bool, message: str):
         """Finds an existing step widget and updates it to its 'finished' state."""
         step_widget = self.workflow_step_widgets.get(step_id)
@@ -578,23 +570,13 @@ class MainWin(QWidget):
         else:
             # Fallback in case the 'start' signal was missed
             print(f"Warning: Could not find a widget for step_id '{step_id}' to update.")
-            final_message = f"[{'SUCCESS' if success else 'FAIL'}] {message}"
-            # You could add a simple text bubble here as a fallback if you want
-            # self.add_bubble_message(final_message, user_send=False)
-
-        # 更新已收集步骤中的对应数据
-        for step in self._agent_steps:
-            if step['step_id'] == step_id:
-                step['success'] = success
-                step['message'] = message
-                break
 
     def handle_agent_finished(self, final_message):
         """Receives Agent successful completion signal."""
         self.input_field.set_send_button_status(True)
         self.current_workflow_container = None  # 重置容器
 
-        # 将 Agent 工作流步骤持久化到数据库
+        # 将 Agent 工作流持久化到数据库
         if hasattr(self, 'conversation_repo') and self.conversation_repo:
             session_id = self.sendTask.assistant.session_id
 
@@ -603,25 +585,30 @@ class MainWin(QWidget):
                 getattr(self.agent_controller, '_thought_chain', [])
             )
 
-            if self._agent_steps or self._react_thought_chain:
+            if self._react_thought_chain:
+                # 1. 保存完整的 agent_workflow 消息（UI 回放用）
                 workflow_content = make_agent_workflow_message(
                     role="assistant",
                     mode="react",
                     final_result=final_message,
-                    steps=self._agent_steps,
                     thought_chain=self._react_thought_chain,
                 )
                 self.conversation_repo.add_message(session_id, 'assistant', workflow_content)
+
+                # 2. 保存紧凑的 agent_memory 消息（供 load_history 快速重建上下文）
+                tool_results = list(self.agent_controller._tool_results)
+                memory_content = make_agent_memory_message(tool_results, final_message)
+                self.conversation_repo.add_message(session_id, 'assistant', memory_content)
+
                 self.conversation_repo.update_timestamp(session_id)
                 logging.info(
                     f"[agent_persist] mode=react "
-                    f"steps={len(self._agent_steps)} "
                     f"thoughts={len(self._react_thought_chain)} "
+                    f"tool_results={len(tool_results)} "
                     f"session={session_id[:8]}.."
                 )
 
-        # 清空步骤收集器
-        self._agent_steps = []
+        # 清空推理链收集器
         self._react_thought_chain = []
 
     def handle_agent_error(self, error_message):
@@ -630,7 +617,6 @@ class MainWin(QWidget):
         self.add_bubble_message(f"<b>❌ Workflow Error:</b><br>{error_message}", user_send=False)
         self.input_field.set_send_button_status(True)
         self.current_workflow_container = None  # 重置容器
-        self._agent_steps.clear()
         self._react_thought_chain.clear()
 
     def send_quest_to_ai(self, message):
@@ -679,12 +665,18 @@ class MainWin(QWidget):
             self.conversation_repo.update_title(self.sendTask.assistant.session_id, title)
 
         if self.current_func == "AI Agent":
-            # 开始新的 Agent 工作流前清空步骤收集器
-            self._agent_steps.clear()
+            # 开始新的 Agent 工作流前清空推理链收集器
             self._react_thought_chain.clear()
 
-            # 保存用户消息到数据库（统一 JSON 格式）
+            # 获取当前 session_id 并同步到 Agent 控制器
             session_id = self.sendTask.assistant.session_id
+            self.agent_controller.session_id = session_id
+
+            # 从数据库加载历史对话到 Agent 控制器（供下次 Agent 调用时注入上下文）
+            if hasattr(self, 'conversation_repo') and self.conversation_repo:
+                self.agent_controller.load_history(self.conversation_repo, session_id)
+
+            # 保存用户消息到数据库（统一 JSON 格式）
             user_json = make_text_message("user", user_input)
             self.conversation_repo.add_message(session_id, "user", user_json)
 
@@ -768,6 +760,10 @@ class MainWin(QWidget):
         self.workflow_step_widgets.clear()
         self.current_workflow_container = None
 
+        # 重置 Agent 控制器的历史和 session_id（新对话从零开始）
+        self.agent_controller.session_id = None
+        self.agent_controller._history = []
+
         self.chat_box.clearLayout()
         self.input_field.show()
         self.chat_intro.show()
@@ -821,8 +817,11 @@ class MainWin(QWidget):
             self._save_incomplete_agent_workflow(session_id)
 
     def _save_incomplete_agent_workflow(self, session_id: str):
-        """保存尚未完成的 Agent 工作流步骤（切换功能/新建对话时调用）"""
-        if not hasattr(self, '_agent_steps') or not self._agent_steps:
+        """保存尚未完成的 Agent 工作流（切换功能/新建对话时调用）"""
+        self._react_thought_chain = list(
+            getattr(self.agent_controller, '_thought_chain', [])
+        )
+        if not self._react_thought_chain:
             return
         conv = self.conversation_repo.get_conversation(session_id)
         if not conv:
@@ -835,19 +834,17 @@ class MainWin(QWidget):
                 if data.get("type") == "agent_workflow":
                     return  # 已有工作流消息，不重复保存
         # 保存未完成的工作流
-        self._react_thought_chain = list(
-            getattr(self.agent_controller, '_thought_chain', [])
-        )
         workflow_content = make_agent_workflow_message(
             role="assistant",
             mode="react",
             final_result='（工作流被中断）',
-            steps=self._agent_steps,
             thought_chain=self._react_thought_chain,
         )
         self.conversation_repo.add_message(session_id, 'assistant', workflow_content)
-        logging.info(f"[_save_incomplete_agent] Saved {len(self._agent_steps)} steps for interrupted workflow")
-        self._agent_steps.clear()
+        logging.info(
+            f"[_save_incomplete_agent] Saved {len(self._react_thought_chain)} "
+            f"thoughts for interrupted workflow"
+        )
         self._react_thought_chain.clear()
 
     def open_history_conversation(self, conversation_id: str):
@@ -903,7 +900,6 @@ class MainWin(QWidget):
         # 8. 清空 UI，重新渲染历史气泡（跳过 system 消息）
         self.workflow_step_widgets.clear()
         self.current_workflow_container = None
-        self._agent_steps.clear()
         self._react_thought_chain.clear()
         self.chat_box.clearLayout()
         for msg in db_messages:
@@ -913,13 +909,16 @@ class MainWin(QWidget):
             data = parse_message_content(msg.content)
             msg_type = data.get("type", "text")
 
+            if msg_type == "agent_memory":
+                # 内部记忆记录，不在 UI 渲染
+                continue
+
             if msg_type == "agent_workflow":
                 # Agent 工作流 → AgentHistoryWidget
                 agent_mode = data.get("mode", "react")
                 final_result = data.get("final_result", "")
-                steps = data.get("steps", [])
                 thought_chain = data.get("thought_chain")
-                widget = AgentHistoryWidget(final_result, steps, agent_mode, thought_chain)
+                widget = AgentHistoryWidget(final_result, agent_mode, thought_chain)
                 self.chat_box.add_message_item(widget)
 
             elif msg_type == "text":
@@ -952,6 +951,14 @@ class MainWin(QWidget):
         # 10. 恢复 ReAct 推理链（从工作流数据中提取）
         if conv.function_type == "AI Agent":
             self.input_field.agent_mode_button.set_mode("react")
+
+            # 同步 session_id 并加载历史到 Agent 控制器
+            self.agent_controller.session_id = conversation_id
+            if hasattr(self, 'conversation_repo') and self.conversation_repo:
+                self.agent_controller.load_history(
+                    self.conversation_repo, conversation_id
+                )
+
             for msg in db_messages:
                 data = parse_message_content(msg.content)
                 if data.get("type") == "agent_workflow":

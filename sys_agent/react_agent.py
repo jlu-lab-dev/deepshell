@@ -12,6 +12,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 from chat.model_manager import ModelManager
 from config.config_manager import ConfigManager
+from chat.message_helpers import parse_message_content, get_agent_memory_content
 
 
 # ──────────────────────────────────────────────
@@ -75,7 +76,9 @@ class ReActAgent:
 
     def __init__(self, model_name: str, tool_schemas: list, function_map: dict,
                  step_cb, obs_cb, final_cb, error_cb, stop_flag,
-                 thought_chain_collector=None):
+                 thought_chain_collector=None,
+                 session_id: str | None = None,
+                 history: list | None = None):
         self.model_name = model_name
         self.tool_schemas = tool_schemas
         self.function_map = function_map
@@ -85,6 +88,9 @@ class ReActAgent:
         self.error_cb = error_cb
         self.stop_flag = stop_flag
         self.thought_chain_collector = thought_chain_collector
+        self.session_id = session_id
+        self.history = history or []
+        self.tool_results: list[dict] = []  # 收集本次运行的工具调用结果
 
         self.model_manager = ModelManager()
         self._load_prompt()
@@ -97,9 +103,12 @@ class ReActAgent:
 
     def run(self, user_input: str):
         """Execute the ReAct loop synchronously. Designed to be called from a QThread."""
-        # Conversation history: alternating user/assistant messages
-        messages = [user_input]
-        session_id = None  # stateless per request
+        # 用历史消息初始化（克隆避免污染原始列表）
+        messages = list(self.history)
+        messages.append(user_input)
+
+        # Agent 内部 LLM 调用使用派生的 session_id，避免与普通 Chat 记忆混淆
+        agent_llm_session = f"react_agent_{self.session_id}" if self.session_id else None
 
         for iteration in range(1, MAX_ITERATIONS + 1):
             if self.stop_flag():
@@ -114,7 +123,7 @@ class ReActAgent:
                     model_name=self.model_name,
                     messages=messages,
                     system_prompt=self.system_prompt,
-                    session_id=session_id,
+                    session_id=agent_llm_session,
                 )
             except Exception as e:
                 self.error_cb(f"模型调用失败: {e}")
@@ -231,6 +240,13 @@ class ReActAgent:
                     "success": True,
                 })
 
+            # ── 收集工具调用结果（用于持久化记忆） ──
+            self.tool_results.append({
+                "tool": tool_name,
+                "args": tool_args,
+                "result_summary": obs_message,
+            })
+
             # ── Append to conversation for next iteration ─────────────────
             # Simulate multi-turn: append assistant response + observation as next user message
             obs_json = json.dumps(result, ensure_ascii=False)
@@ -289,11 +305,15 @@ class ReActAgentController(QObject):
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, session_id: str | None = None):
         super().__init__()
         self.model_name = model
+        self.session_id = session_id
         self._worker: _ReActWorker | None = None
         self._thought_chain: list = []
+        self._tool_results: list[dict] = []       # 收集工具调用结果
+        self._final_answer: str | None = None     # 捕获最终答案
+        self._history: list[str] = []              # 格式化后的历史（注入 Agent）
 
         # Load all tools from experts.json (same approach as AgentController)
         self._tool_schemas, self._function_map = self._load_all_tools()
@@ -328,6 +348,68 @@ class ReActAgentController(QObject):
 
     # ── Public API (mirror AgentController) ──────────────────────────────
 
+    def load_history(self, conversation_repo, session_id: str):
+        """
+        从数据库加载历史对话并格式化为字符串列表，供注入到 Agent 的 messages 中。
+        """
+        self.session_id = session_id
+        self._history = []
+        if not conversation_repo or not session_id:
+            return
+
+        db_messages = conversation_repo.get_messages(session_id)
+        for msg in db_messages:
+            if msg.role not in ("user", "assistant"):
+                continue
+            data = parse_message_content(msg.content)
+            msg_type = data.get("type", "text")
+
+            if msg_type == "text":
+                text = data.get("content", "")
+                if msg.role == "user":
+                    self._history.append(f"用户问：{text}")
+                else:
+                    self._history.append(f"助手回答：{text}")
+            elif msg_type == "agent_memory":
+                # 紧凑记忆格式：优先使用
+                entries = get_agent_memory_content(msg.content)
+                self._history.extend(entries)
+            elif msg_type == "agent_workflow":
+                # 兼容旧数据：从完整工作流中提取工具结果和最终答案
+                thought_chain = data.get("thought_chain", [])
+                for tc in thought_chain:
+                    if tc.get("action") and tc.get("success"):
+                        tool_name = tc["action"].get("tool", "unknown")
+                        obs = tc.get("observation", "")
+                        self._history.append(
+                            f"Observation (tool={tool_name}): {obs}"
+                        )
+                final = data.get("final_result", "")
+                if final:
+                    self._history.append(f"助手回答：{final}")
+
+        # 安全截断（避免 token 爆炸）
+        MAX_HISTORY_CHARS = 8000  # 约 4000 tokens
+        total_chars = sum(len(s) for s in self._history)
+        if total_chars > MAX_HISTORY_CHARS:
+            truncated = []
+            running_total = 0
+            for entry in reversed(self._history):
+                if running_total + len(entry) > MAX_HISTORY_CHARS:
+                    break
+                truncated.insert(0, entry)
+                running_total += len(entry)
+            self._history = truncated
+            logging.warning(
+                f"[ReActController] History truncated from {total_chars} to "
+                f"{running_total} chars ({len(self._history)} entries)"
+            )
+
+        logging.info(
+            f"[ReActController] Loaded {len(self._history)} history entries "
+            f"for session={session_id[:8] if session_id else 'None'}.."
+        )
+
     @pyqtSlot(str)
     def start_workflow(self, user_input: str):
         """Entry point called via QMetaObject.invokeMethod from main thread."""
@@ -337,9 +419,29 @@ class ReActAgentController(QObject):
             self._worker.wait()
 
         self._thought_chain = []
+        self._tool_results = []
+        self._final_answer = None
 
         def collect_thought(entry: dict):
             self._thought_chain.append(entry)
+            # 同时收集工具调用结果（用于记忆持久化）
+            if entry.get("action") and entry.get("success"):
+                action = entry["action"]
+                self._tool_results.append({
+                    "tool": action.get("tool", "unknown"),
+                    "args": action.get("args", {}),
+                    "result_summary": entry.get("observation", ""),
+                })
+
+        def capture_final(answer: str):
+            self._final_answer = answer
+            # 将本次运行结果追加到 _history（供下次调用使用）
+            for tr in self._tool_results:
+                self._history.append(
+                    f"Observation (tool={tr['tool']}): {tr['result_summary']}"
+                )
+            if answer:
+                self._history.append(f"助手回答：{answer}")
 
         agent = ReActAgent(
             model_name=self.model_name,
@@ -351,12 +453,15 @@ class ReActAgentController(QObject):
             error_cb=lambda msg: None,
             stop_flag=lambda: False,
             thought_chain_collector=collect_thought,
+            session_id=self.session_id,
+            history=self._history,
         )
 
         self._worker = _ReActWorker(agent, user_input)
         # Relay worker signals → controller signals
         self._worker.workflow_step_started.connect(self.workflow_step_started)
         self._worker.workflow_step_finished.connect(self.workflow_step_finished)
+        self._worker.finished_signal.connect(capture_final)
         self._worker.finished_signal.connect(self.finished_signal)
         self._worker.error_signal.connect(self.error_signal)
         self._worker.start()
