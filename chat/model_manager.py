@@ -1,6 +1,8 @@
 # model_manager.py
 
+import json
 import logging
+import re
 from typing import Dict, Any, List, Generator
 from langchain_community.chat_models import ChatTongyi, ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
@@ -184,15 +186,13 @@ class ModelManager:
             self._persist_stream_messages(session_id)
 
     def _persist_stream_messages(self, conversation_id: str):
-        """将内存中最新一轮的消息（user + assistant）追加写入数据库（增量写入，跳过 system，清理前缀）"""
+        """将内存中最新一轮的消息（user + assistant）追加写入数据库（增量写入，分离字段）"""
         history = self.memory.get(conversation_id)
         if not history or not history.messages:
             return
-        # 只持久化 user/assistant 消息，跳过 system 消息
         msgs_to_save = [m for m in history.messages if m.type in ("human", "ai")]
         if not msgs_to_save:
             return
-        # 增量写入：只写数据库中还没有的消息
         existing = self.conversation_repo.get_messages(conversation_id)
         existing_count = len(existing)
         logging.info(f"[_persist] session={conversation_id[:8]}.. memory_msgs={len(msgs_to_save)} db_msgs={existing_count}")
@@ -200,13 +200,48 @@ class ModelManager:
             for msg in msgs_to_save[existing_count:]:
                 role = "user" if msg.type == "human" else "assistant"
                 raw_content = msg.content
-                if role == "user" and raw_content.startswith("用户输入："):
-                    raw_content = raw_content[len("用户输入："):]
-                    if raw_content.endswith('\n'):
-                        raw_content = raw_content[:-1]
-                # 统一包裹为 JSON 格式
-                content = make_text_message(role, raw_content)
-                logging.info(f"[_persist]   -> writing role={role}, content_len={len(content)}, text_preview={raw_content[:20]!r}")
+
+                if role == "user":
+                    user_input = raw_content
+                    # 去掉 "用户输入：" 前缀
+                    if user_input.startswith("用户输入："):
+                        user_input = user_input[len("用户输入："):]
+                    user_input = user_input.rstrip("\n")
+
+                    # 提取 RAG 标记
+                    relevant_docs = None
+                    if "__RAG_DOCS_JSON__:" in raw_content:
+                        user_input_clean, rag_block = raw_content.split("__RAG_DOCS_JSON__:", 1)
+                        user_input_clean = user_input_clean.rstrip("\n")
+                        if user_input_clean.startswith("用户输入："):
+                            user_input_clean = user_input_clean[len("用户输入："):]
+                        user_input_clean = user_input_clean.rstrip("\n")
+                        try:
+                            relevant_docs = json.loads(rag_block.strip())
+                        except Exception:
+                            relevant_docs = None
+                        user_input = user_input_clean
+
+                    # 提取 attachment_content（解析 "用户上传附件内容 N：" 段落）
+                    attachment_content = []
+                    att_matches = re.findall(
+                        r"用户上传附件内容 \d+：(.*?)(?=\n\n|$)",
+                        raw_content, re.DOTALL
+                    )
+                    for att_text in att_matches:
+                        attachment_content.append({"content": att_text.strip()})
+
+                    content = make_text_message(
+                        role="user",
+                        user_input=user_input,
+                        attachment_content=attachment_content or None,
+                        relevant_docs=relevant_docs,
+                    )
+
+                else:
+                    content = make_text_message(role="assistant", user_input=raw_content)
+
+                logging.info(f"[_persist]   -> writing role={role}, content_len={len(content)}, preview={user_input[:20]!r}" if role == "user" else f"[_persist]   -> writing role={role}, preview={raw_content[:20]!r}")
                 self.conversation_repo.add_message(conversation_id, role, content)
         self.conversation_repo.update_timestamp(conversation_id)
 

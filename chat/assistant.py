@@ -2,7 +2,7 @@
 
 import uuid
 
-from typing import Optional
+from typing import Optional, Tuple
 
 from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
@@ -71,18 +71,31 @@ class Assistant:
 
     def chat_stream(self, messages: list[str]):
         import logging
-        
+        import json
+
         enhanced_message = messages[-1]
         context_parts = []
-        
+        rag_docs = []   # RAG 结构化结果，供后续持久化
+
         logging.info(f"[ASSISTANT_STREAM] 开始处理流式查询: '{messages[-1]}'")
-        
+
         # 使用 RAG 模式，将知识库搜索结果注入
         if len(self.kb_list):
             logging.info(f"[ASSISTANT_STREAM] 使用知识库: {self.kb_list}")
-            knowledge = self.rag_manager.get_relevant_context(messages[-1], knowledge_bases=self.kb_list)
-            context_parts.append(f"知识库信息：\n{knowledge}")
-        
+            # 调用 search 获取结构化结果
+            rag_results = self.rag_manager.search(messages[-1], k=3, knowledge_bases=self.kb_list)
+            if rag_results:
+                for i, result in enumerate(rag_results):
+                    source = result.get('metadata', {}).get('source', 'Unknown')
+                    content_text = result.get('content', '')
+                    rag_docs.append({"source": source, "content": content_text})
+                    context_parts.append(f"[Document {i+1}] (Source: {source})\n{content_text}")
+                knowledge = "\n\n".join(context_parts)
+                context_parts = [f"知识库信息：\n{knowledge}"]
+            else:
+                context_parts = []
+                logging.info(f"[ASSISTANT_STREAM] 知识库未返回有效结果")
+
         # 检查是否需要网络搜索
         if self.web_search_manager.is_search_query(messages[-1]):
             logging.info(f"[ASSISTANT_STREAM] 查询被识别为需要网络搜索")
@@ -94,7 +107,7 @@ class Assistant:
                 logging.warning(f"[ASSISTANT_STREAM] 网络搜索未返回有效结果")
         else:
             logging.info(f"[ASSISTANT_STREAM] 查询未被识别为需要网络搜索")
-        
+
         # 如果有上下文信息，则添加到消息中
         if context_parts:
             context_text = "\n\n".join(context_parts)
@@ -104,12 +117,53 @@ class Assistant:
         else:
             logging.info(f"[ASSISTANT_STREAM] 无额外上下文，使用原始查询")
 
+        # 附加 RAG 结构化结果标记，供 model_manager 在持久化时提取
+        if rag_docs:
+            messages[-1] = messages[-1] + f"\n__RAG_DOCS_JSON__:{json.dumps(rag_docs, ensure_ascii=False)}\n"
+
         return self.model_manager.chat_stream(
             model_name=self.model,
             messages=messages,
             system_prompt=self.prompt_template,
             session_id=self.session_id
         )
+
+    def build_rag_enriched_message(self, user_input: str) -> Tuple[str, list]:
+        """同步构建带 RAG 上下文的用户消息（用于 Agent 首轮调用）。
+
+        与 chat_stream 不同，此方法不调用 LLM，仅完成 RAG 检索并返回增强文本。
+
+        Returns:
+            enriched_text: 带 RAG 上下文的字符串（供 LLM 使用）
+            rag_docs: [{source, content}]（供持久化用）
+        """
+        import logging
+        import json
+
+        context_parts = []
+        rag_docs = []
+
+        logging.info(f"[ASSISTANT_RAG] 开始 RAG 增强: '{user_input}'")
+
+        if len(self.kb_list):
+            logging.info(f"[ASSISTANT_RAG] 使用知识库: {self.kb_list}")
+            rag_results = self.rag_manager.search(user_input, k=3, knowledge_bases=self.kb_list)
+            if rag_results:
+                for result in rag_results:
+                    source = result.get('metadata', {}).get('source', 'Unknown')
+                    content_text = result.get('content', '')
+                    rag_docs.append({"source": source, "content": content_text})
+                    context_parts.append(f"[Document] (Source: {source})\n{content_text}")
+
+        if context_parts:
+            context_text = "参考以下信息回答用户问题：\n" + "\n\n".join(context_parts)
+            enriched_text = f"{user_input}\n\n{context_text}"
+            logging.info(f"[ASSISTANT_RAG] RAG 增强完成，共 {len(rag_docs)} 个文档")
+        else:
+            enriched_text = user_input
+            logging.info(f"[ASSISTANT_RAG] 无 RAG 结果，使用原始查询")
+
+        return enriched_text, rag_docs
 
     def set_selected_kb(self, selected_kb_id_list: list[int]):
         self.kb_list = selected_kb_id_list

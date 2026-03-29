@@ -78,7 +78,8 @@ class ReActAgent:
                  step_cb, obs_cb, final_cb, error_cb, stop_flag,
                  thought_chain_collector=None,
                  session_id: str | None = None,
-                 history: list | None = None):
+                 history: list | None = None,
+                 rag_docs: list | None = None):
         self.model_name = model_name
         self.tool_schemas = tool_schemas
         self.function_map = function_map
@@ -90,6 +91,7 @@ class ReActAgent:
         self.thought_chain_collector = thought_chain_collector
         self.session_id = session_id
         self.history = history or []
+        self.rag_docs = rag_docs or []
         self.tool_results: list[dict] = []  # 收集本次运行的工具调用结果
 
         self.model_manager = ModelManager()
@@ -105,7 +107,11 @@ class ReActAgent:
         """Execute the ReAct loop synchronously. Designed to be called from a QThread."""
         # 用历史消息初始化（克隆避免污染原始列表）
         messages = list(self.history)
-        messages.append(user_input)
+        # ── 首轮：注入 RAG 上下文（仅本轮使用，不进入记忆）────────
+        first_msg = user_input
+        if self.rag_docs:
+            first_msg = first_msg + f"\n__RAG_DOCS_JSON__:{json.dumps(self.rag_docs, ensure_ascii=False)}\n"
+        messages.append(first_msg)
 
         # Agent 内部 LLM 调用使用派生的 session_id，避免与普通 Chat 记忆混淆
         agent_llm_session = f"react_agent_{self.session_id}" if self.session_id else None
@@ -410,8 +416,8 @@ class ReActAgentController(QObject):
             f"for session={session_id[:8] if session_id else 'None'}.."
         )
 
-    @pyqtSlot(str)
-    def start_workflow(self, user_input: str):
+    @pyqtSlot(str, list)
+    def start_workflow(self, user_input: str, rag_docs: list = None):
         """Entry point called via QMetaObject.invokeMethod from main thread."""
         # Stop previous worker if still running
         if self._worker and self._worker.isRunning():
@@ -455,6 +461,7 @@ class ReActAgentController(QObject):
             thought_chain_collector=collect_thought,
             session_id=self.session_id,
             history=self._history,
+            rag_docs=rag_docs,
         )
 
         self._worker = _ReActWorker(agent, user_input)

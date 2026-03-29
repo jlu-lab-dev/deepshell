@@ -40,6 +40,7 @@ from utils.intro_ui import DocAnalysisIntroPage
 from utils.open_local_app_task import OpenLocalAppTask
 from draw.drawing_task import AiDrawingTask
 from server_check import ServerCheck
+from ui.file_thumbnail import FileThumbnail
 from ui.button.knowledge_base_select_button import KnowledgeBaseSelectButton
 from ui.button.model_select_button import ModelSelectButton
 from ui.chat.bubble_message import BubbleMessage, MessageType, ThumbnailMessage, ButtonMessage, \
@@ -54,7 +55,7 @@ from config.config_manager import ConfigManager
 from chat.message_helpers import (
     is_json_message, parse_message_content, get_text_content,
     make_text_message, make_agent_workflow_message,
-    make_agent_memory_message,
+    make_agent_memory_message, get_message_parts,
 )
 
 
@@ -676,15 +677,36 @@ class MainWin(QWidget):
             if hasattr(self, 'conversation_repo') and self.conversation_repo:
                 self.agent_controller.load_history(self.conversation_repo, session_id)
 
-            # 保存用户消息到数据库（统一 JSON 格式）
-            user_json = make_text_message("user", user_input)
+            # ── 提取附件内容（从 full_message 解析）─────────────────
+            attachment_content = []
+            att_matches = re.findall(
+                r"用户上传附件内容 \d+：(.*?)(?=\n\n|$)",
+                full_message, re.DOTALL
+            )
+            for att_text in att_matches:
+                attachment_content.append({"content": att_text.strip()})
+
+            # ── RAG 增强（同步，在主线程完成）─────────────────────────
+            enriched_text, rag_docs = self.sendTask.assistant.build_rag_enriched_message(user_input)
+
+            # ── 保存用户消息（结构化，含 attachment + RAG）──────────
+            user_json = make_text_message(
+                role="user",
+                user_input=user_input,
+                attachment_content=attachment_content or None,
+                relevant_docs=rag_docs or None,
+            )
             self.conversation_repo.add_message(session_id, "user", user_json)
 
             # Show a generic waiting message immediately for better user feedback
             self.show_waiting_message(True)
             self.agent_thread.start()
-            QMetaObject.invokeMethod(self.agent_controller, "start_workflow",
-                                     Qt.QueuedConnection, Q_ARG(str, full_message))
+            QMetaObject.invokeMethod(
+                self.agent_controller, "start_workflow",
+                Qt.QueuedConnection,
+                Q_ARG(str, enriched_text),
+                Q_ARG(list, rag_docs or []),
+            )
             return
 
         # For all other functions, maintain the original logic
@@ -803,7 +825,7 @@ class MainWin(QWidget):
                     raw_content = raw_content[len("用户输入："):]
                     if raw_content.endswith('\n'):
                         raw_content = raw_content[:-1]
-                content = make_text_message(role, raw_content)
+                content = make_text_message(role, user_input=raw_content)
                 logging.info(f"[_save_conv]   -> writing role={role}, text_preview={raw_content[:20]!r}")
                 self.conversation_repo.add_message(session_id, role, content)
 
@@ -923,9 +945,20 @@ class MainWin(QWidget):
 
             elif msg_type == "text":
                 # 普通文本 → BubbleMessage
-                text_content = data.get("content", msg.content)
+                parts = get_message_parts(msg.content)
+                display_text = parts.get("user_input")
+                attachment_content = parts.get("attachment_content", [])
+
+                # 渲染附件缩略图（从 attachment_content）
+                if attachment_content and msg.role == "user":
+                    for att in attachment_content:
+                        name = att.get("name", "附件")
+                        att_thumbnail = FileThumbnail(file_path=name)
+                        thumbnail_msg = ThumbnailMessage(user_send=True, thumbnail=att_thumbnail)
+                        self.chat_box.add_message_item(thumbnail_msg)
+
                 bubble = BubbleMessage(
-                    text_content, '', MessageType.TEXT,
+                    display_text, '', MessageType.TEXT,
                     font_size=12, user_send=(msg.role == "user")
                 )
                 self.chat_box.add_message_item(bubble)

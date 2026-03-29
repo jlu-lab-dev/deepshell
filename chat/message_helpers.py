@@ -11,11 +11,7 @@ def is_json_message(content: str) -> bool:
 
 
 def parse_message_content(content: str) -> dict:
-    """
-    解析消息 content，统一入口：
-    - JSON 格式 → 返回 dict
-    - 纯文本（旧格式兼容）→ 返回 {"type": "text", "content": 原文}
-    """
+    """解析消息 content JSON → dict。非 JSON 时返回原始字符串包装。"""
     if is_json_message(content):
         try:
             return json.loads(content)
@@ -25,10 +21,22 @@ def parse_message_content(content: str) -> dict:
 
 
 def get_text_content(content: str) -> str:
-    """从任意格式 content 中提取纯文本（用于 LLM 上下文重建）。"""
+    """
+    从消息 content 中提取用于 LLM 上下文重建的文本。
+    - text 类型：用 build_llm_context 从 user_input / attachment_content / relevant_docs 重建完整上下文
+    - agent_memory：返回 final_answer
+    - agent_workflow：返回 final_result
+    """
     data = parse_message_content(content)
     msg_type = data.get("type", "text")
     if msg_type == "text":
+        # 有结构化字段时，用 build_llm_context 重建完整 LLM 上下文
+        if "user_input" in data:
+            return build_llm_context(
+                user_input=data["user_input"],
+                attachment_content=data.get("attachment_content"),
+                relevant_docs=data.get("relevant_docs"),
+            )
         return data.get("content", content)
     elif msg_type == "agent_memory":
         return data.get("final_answer", content)
@@ -37,10 +45,66 @@ def get_text_content(content: str) -> str:
     return content
 
 
-def make_text_message(role: str, text: str) -> str:
-    """构造 type=text JSON 消息字符串。"""
-    obj = {"role": role, "type": "text", "content": text}
+def make_text_message(role: str, *,
+                     user_input: str = "",
+                     attachment_content: list = None,
+                     relevant_docs: list = None) -> str:
+    """
+    构造 type=text JSON 消息字符串。
+    content 字段由 build_llm_context 自动生成，不需要手动传入。
+    """
+    obj = {
+        "role": role,
+        "type": "text",
+        "user_input": user_input,
+    }
+    if attachment_content is not None:
+        obj["attachment_content"] = attachment_content
+    if relevant_docs is not None:
+        obj["relevant_docs"] = relevant_docs
+    # content 由结构化字段自动生成
+    obj["content"] = build_llm_context(user_input, attachment_content, relevant_docs)
     return json.dumps(obj, ensure_ascii=False)
+
+
+def get_message_parts(content: str) -> dict:
+    """
+    从消息 content 中提取各部分，用于 UI 渲染。
+    返回 {"user_input", "attachment_content", "relevant_docs", "content"}
+    """
+    data = parse_message_content(content)
+    return {
+        "user_input": data.get("user_input", ""),
+        "attachment_content": data.get("attachment_content", []),
+        "relevant_docs": data.get("relevant_docs", []),
+        "content": data.get("content", ""),
+    }
+
+
+def build_llm_context(user_input: str, attachment_content: list = None,
+                      relevant_docs: list = None) -> str:
+    """
+    根据各部分组装发给 LLM 的完整字符串。
+    用于从结构化字段重建上下文，或在 make_text_message 中自动生成 content。
+    """
+    parts = [user_input]
+
+    if attachment_content:
+        for i, att in enumerate(attachment_content):
+            name = att.get("name", f"附件{i+1}")
+            text = att.get("content", "")
+            parts.append(f"用户上传附件内容 {i+1}：{name}\n{text}")
+
+    if relevant_docs:
+        doc_parts = []
+        for doc in relevant_docs:
+            source = doc.get("source", "未知来源")
+            text = doc.get("content", "")
+            doc_parts.append(f"[Document] (Source: {source})\n{text}")
+        if doc_parts:
+            parts.append("参考以下信息回答用户问题：\n" + "\n\n".join(doc_parts))
+
+    return "\n\n".join(parts)
 
 
 def make_agent_workflow_message(
