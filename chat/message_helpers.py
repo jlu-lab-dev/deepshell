@@ -42,6 +42,8 @@ def get_text_content(content: str) -> str:
         return data.get("final_answer", content)
     elif msg_type == "agent_workflow":
         return data.get("final_result", content)
+    elif msg_type == "summary":
+        return f"[历史对话摘要]\n{data.get('summary', '')}"
     return content
 
 
@@ -154,3 +156,45 @@ def get_agent_memory_content(content: str) -> list:
     if final:
         result.append(f"助手回答：{final}")
     return result
+
+
+# ── Summary (memory compression) ──────────────────────────────────────
+
+def make_summary_message(summary_text: str) -> str:
+    """构造 type=summary JSON 消息字符串（role=system）。"""
+    return json.dumps({
+        "role": "system",
+        "type": "summary",
+        "summary": summary_text,
+    }, ensure_ascii=False)
+
+
+def get_summary_text(content: str) -> str:
+    """从 summary 消息中提取摘要文本。非 summary 类型返回空字符串。"""
+    data = parse_message_content(content)
+    if data.get("type") == "summary":
+        return data.get("summary", "")
+    return ""
+
+
+def make_compressed_marker(content_json: str) -> str:
+    """
+    将原始消息 JSON 标记为已压缩：在原始 JSON 中追加 "compressed": true。
+    已压缩的消息：UI 可渲染，但 LLM 上下文 / Agent 历史加载时跳过。
+    """
+    try:
+        data = json.loads(content_json) if is_json_message(content_json) else {"type": "text", "content": content_json}
+    except json.JSONDecodeError:
+        data = {"type": "text", "content": content_json}
+    data["compressed"] = True
+    return json.dumps(data, ensure_ascii=False)
+
+
+def is_compressed(content: str) -> bool:
+    """判断消息是否已被标记为压缩。"""
+    if not is_json_message(content):
+        return False
+    try:
+        return json.loads(content).get("compressed", False) is True
+    except json.JSONDecodeError:
+        return False

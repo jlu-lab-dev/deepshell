@@ -12,7 +12,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 from chat.model_manager import ModelManager
 from config.config_manager import ConfigManager
-from chat.message_helpers import parse_message_content, get_agent_memory_content
+from chat.message_helpers import parse_message_content, get_agent_memory_content, get_summary_text, is_compressed
 
 
 # ──────────────────────────────────────────────
@@ -357,6 +357,7 @@ class ReActAgentController(QObject):
     def load_history(self, conversation_repo, session_id: str):
         """
         从数据库加载历史对话并格式化为字符串列表，供注入到 Agent 的 messages 中。
+        支持 summary 类型消息；跳过 compressed 标记消息；超出字符限制时截断。
         """
         self.session_id = session_id
         self._history = []
@@ -365,10 +366,21 @@ class ReActAgentController(QObject):
 
         db_messages = conversation_repo.get_messages(session_id)
         for msg in db_messages:
-            if msg.role not in ("user", "assistant"):
+            if msg.role not in ("user", "assistant", "system"):
                 continue
+
+            # 已压缩的原始消息：UI 可渲染，但不注入 Agent 历史
+            if is_compressed(msg.content):
+                continue
+
             data = parse_message_content(msg.content)
             msg_type = data.get("type", "text")
+
+            if msg_type == "summary":
+                summary = get_summary_text(msg.content)
+                if summary:
+                    self._history.append(f"[历史对话摘要]\n{summary}")
+                continue
 
             if msg_type == "text":
                 text = data.get("content", "")
@@ -394,22 +406,9 @@ class ReActAgentController(QObject):
                 if final:
                     self._history.append(f"助手回答：{final}")
 
-        # 安全截断（避免 token 爆炸）
-        MAX_HISTORY_CHARS = 8000  # 约 4000 tokens
-        total_chars = sum(len(s) for s in self._history)
-        if total_chars > MAX_HISTORY_CHARS:
-            truncated = []
-            running_total = 0
-            for entry in reversed(self._history):
-                if running_total + len(entry) > MAX_HISTORY_CHARS:
-                    break
-                truncated.insert(0, entry)
-                running_total += len(entry)
-            self._history = truncated
-            logging.warning(
-                f"[ReActController] History truncated from {total_chars} to "
-                f"{running_total} chars ({len(self._history)} entries)"
-            )
+        # 委托 MemoryCompressor 做字符数截断（从头部丢弃，超限部分丢弃）
+        from chat.memory_compressor import MemoryCompressor
+        self._history = MemoryCompressor().compress_agent_history(self._history)
 
         logging.info(
             f"[ReActController] Loaded {len(self._history)} history entries "

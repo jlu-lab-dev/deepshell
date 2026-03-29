@@ -38,3 +38,11 @@ hybrid_search:
   score_threshold: 0.3   # 融合分数低于此值的结果将被过滤
   keyword_top_k: 20      # BM25 预取数量
   semantic_top_k: 20     # 语义预取数量
+
+memory:
+  compress_enabled: true
+  compress_threshold_rounds: 10   # 超过此轮次触发压缩
+  keep_recent_rounds: 3           # 保留最近 N 轮完整对话
+  compress_model: "DeepSeek-V3"   # 用于生成摘要的模型
+  max_summary_tokens: 500         # 摘要最大字数
+  agent_max_history_chars: 4000   # Agent 历史字符上限

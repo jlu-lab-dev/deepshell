@@ -165,3 +165,27 @@ class ConversationRepository:
             except SQLAlchemyError as e:
                 logging.error(f"Error deleting messages: {e}")
                 return False
+
+    def delete_messages_by_range(self, conversation_id: str, start_id: int, end_id: int) -> bool:
+        """删除某会话指定 id 范围内的消息（包含两端）。"""
+        with self.db_manager.session_scope() as session:
+            try:
+                session.query(Message).filter(
+                    Message.conversation_id == conversation_id,
+                    Message.id >= start_id,
+                    Message.id <= end_id,
+                ).delete(synchronize_session=False)
+                return True
+            except SQLAlchemyError as e:
+                logging.error(f"Error deleting messages by range: {e}")
+                return False
+
+    def delete_message_by_id(self, message_id: int) -> bool:
+        """根据 message id 删除单条消息。"""
+        with self.db_manager.session_scope() as session:
+            try:
+                session.query(Message).filter(Message.id == message_id).delete(synchronize_session=False)
+                return True
+            except SQLAlchemyError as e:
+                logging.error(f"Error deleting message by id: {e}")
+                return False

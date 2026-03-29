@@ -56,6 +56,7 @@ from chat.message_helpers import (
     is_json_message, parse_message_content, get_text_content,
     make_text_message, make_agent_workflow_message,
     make_agent_memory_message, get_message_parts,
+    get_summary_text, is_compressed,
 )
 
 
@@ -438,6 +439,11 @@ class MainWin(QWidget):
                 if not hasattr(self, 'sendTask') or not isinstance(self.sendTask, ChatTask):
                     self.sendTask = ChatTask()
         self.sendTask.assistant.set_selected_kb(self.selected_kb_id_list)
+        try:
+            self.sendTask.complete_signal.disconnect(self.ai_callback)
+            self.sendTask.update_signal.disconnect(self.update_ai_message)
+        except (RuntimeError, TypeError):
+            pass  # 尚未连接，忽略
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
 
@@ -902,35 +908,58 @@ class MainWin(QWidget):
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
 
-        # 7. 从 DB 加载历史消息到内存
+        # 7. 从 DB 加载历史消息到内存（重建 LLM 上下文）
+        #    规则：跳过 compressed 消息；全部 summary 拼接到第一条 HumanMessage 前面；
+        #    不触碰 SystemMessage（assistant 注入的 system prompt 不受影响）。
         db_messages = self.conversation_repo.get_messages(conversation_id)
         mm = self.sendTask.assistant.model_manager
         history = mm.get_session_history(conversation_id)
         history.clear()  # 确保内存历史是干净的
+        # 收集所有 summary（多次压缩可能产生多条）
+        all_summaries = []
+        for msg in db_messages:
+            if msg.role == "system":
+                data_tmp = parse_message_content(msg.content)
+                if data_tmp.get("type") == "summary":
+                    s = get_summary_text(msg.content)
+                    if s:
+                        all_summaries.append(s)
+        combined_summary = "\n\n---\n\n".join(all_summaries) if all_summaries else ""
+        injected_summary = False
         for msg in db_messages:
             if msg.role not in ("user", "assistant"):
                 continue
+            # 已压缩的原始消息不注入 LLM 上下文
+            if is_compressed(msg.content):
+                continue
             text = get_text_content(msg.content)
             if msg.role == "user":
-                history.add_user_message(text)
+                if not injected_summary and combined_summary:
+                    history.add_user_message(
+                        f"[历史对话摘要]\n{combined_summary}\n\n{text}"
+                    )
+                    injected_summary = True
+                else:
+                    history.add_user_message(text)
             elif msg.role == "assistant":
                 history.add_ai_message(text)
+        # 如果只有 summary 没有其他 user 消息，把摘要单独注入
+        if combined_summary and not injected_summary:
+            history.add_user_message(f"[历史对话摘要]\n{combined_summary}")
 
         logging.info(f"[restore] db_messages count={len(db_messages)}, roles={[m.role for m in db_messages]}")
-        # 8. 清空 UI，重新渲染历史气泡（跳过 system 消息）
+        # 8. 清空 UI，重新渲染历史气泡
+        #    规则：所有消息都渲染（包括 compressed 标记的），跳过 agent_memory 和 summary 类型
         self.workflow_step_widgets.clear()
         self.current_workflow_container = None
         self._react_thought_chain.clear()
         self.chat_box.clearLayout()
         for msg in db_messages:
-            if msg.role not in ("user", "assistant"):
-                continue
-
             data = parse_message_content(msg.content)
             msg_type = data.get("type", "text")
 
-            if msg_type == "agent_memory":
-                # 内部记忆记录，不在 UI 渲染
+            # agent_memory 和 summary 类型不渲染
+            if msg_type in ("agent_memory", "summary"):
                 continue
 
             if msg_type == "agent_workflow":
