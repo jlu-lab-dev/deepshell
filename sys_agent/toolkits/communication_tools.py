@@ -1,77 +1,76 @@
-import smtplib
+# sys_agent/toolkits/communication_tools.py
+"""
+通讯工具集。
+提供邮件发送相关的联系人查询和邮件草稿创建功能。
+"""
+
+from __future__ import annotations
+
 import urllib.parse
 import webbrowser
-from email.mime.text import MIMEText
+from typing import Any
 
-# 实际应用中，联系人信息应从数据库或配置文件读取
-CONTACTS = {
+from ._base import ok, fail, require_non_empty
+
+# 联系人通讯录（可扩展为数据库或配置文件读取）
+CONTACTS: dict[str, str] = {
     "周总": "zhouzong@163.com",
-    "李经理": "li@gmail.com"
+    "李经理": "li@gmail.com",
 }
 
 
-def atomic_result(success, message, **kwargs):
-    """
-    一个更灵活的结果生成器。
-
-    Args:
-        success (bool): 操作是否成功。
-        message (str): 操作结果的消息。
-        **kwargs: 任意数量的关键字参数，将作为返回字典的核心数据。
-                  例如: found_files=["path1", "path2"]
-
-    Returns:
-        dict: 一个包含执行状态和所有传入数据的字典。
-    """
-    result = {
-        "success": success,
-        "message": message
-    }
-    # 将所有传入的关键字参数合并到结果字典中
-    result.update(kwargs)
-    return result
-
-def get_contact_email(contact_name: str):
-    email = CONTACTS.get(contact_name)
-    if email:
-        return atomic_result(True, f"成功找到联系人 {contact_name} 的邮箱", email=email)
-    else:
-        return atomic_result(False, f"未在通讯录中找到联系人: {contact_name}")
-
-def compose_email(recipient_email: str, subject: str, body: str, attachment_path: str):
-    """
-    调用系统的默认邮件客户端，并预先填好收件人、主题、正文。
-    注意：标准的 mailto: URI 方案不支持直接添加附件，
-    因此此函数的功能是打开邮件草稿，并告知用户需要手动添加附件。
-    """
+def get_contact_email(contact_name: str) -> dict[str, Any]:
+    """根据联系人姓名查询邮箱地址。"""
     try:
-        # 使用 urllib.parse.quote 对主题和正文进行URL编码，以正确处理空格、换行符和特殊字符
-        encoded_subject = urllib.parse.quote(subject)
-        encoded_body = urllib.parse.quote(body)
+        require_non_empty(contact_name, "contact_name")
+        email = CONTACTS.get(contact_name)
+        if email:
+            return ok(f"查询到 {contact_name} 的邮箱", email=email)
+        known = ", ".join(CONTACTS.keys()) or "（暂无）"
+        return fail(f"未在通讯录中找到联系人: {contact_name}。当前已知联系人: {known}")
+    except ValueError as e:
+        return fail(f"参数错误: {e}")
 
-        # 构造 mailto: 链接
-        # 注意：正文中我们加入一条提示，提醒用户添加附件
-        user_prompt_body = f"""{body}
 
----------------------------------
-(此邮件由 DeepShell 自动生成)
+def compose_email(
+    recipient_email: str,
+    subject: str,
+    body: str,
+    attachment_path: str,
+) -> dict[str, Any]:
+    """打开邮件客户端创建预填草稿，提示用户添加附件。"""
+    try:
+        require_non_empty(recipient_email, "recipient_email")
+        require_non_empty(subject, "subject")
+        require_non_empty(body, "body")
+        require_non_empty(attachment_path, "attachment_path")
+
+        # 自动补充附件说明
+        body_with_note = f"""{body}
+
+---
+（此邮件由 DeepShell 自动生成）
 请手动添加附件: {attachment_path}
 """
-        encoded_body_with_prompt = urllib.parse.quote(user_prompt_body)
-
-        mailto_url = f"mailto:{recipient_email}?subject={encoded_subject}&body={encoded_body_with_prompt}"
-
-        # 使用 webbrowser 模块打开链接，这将启动用户的默认邮件程序
-        webbrowser.open(mailto_url)
-
-        message = f"已打开邮件客户端。请检查草稿，手动附加文件 '{attachment_path}'，然后点击发送。"
-        return atomic_result(True, message)
-
+        params = urllib.parse.urlencode({
+            "subject": subject,
+            "body": body_with_note,
+        })
+        mailto = f"mailto:{recipient_email}?{params}"
+        webbrowser.open(mailto)
+        return ok(
+            f"邮件草稿已创建。请在邮件客户端中检查并添加附件 '{attachment_path}' 后发送。",
+            recipient=recipient_email,
+            subject=subject,
+            attachment_note=attachment_path,
+        )
+    except ValueError as e:
+        return fail(f"参数错误: {e}")
     except Exception as e:
-        return atomic_result(False, f"打开邮件客户端失败: {e}")
+        return fail(f"打开邮件客户端失败: {e}")
 
 
-FUNCTION_MAP = {
+FUNCTION_MAP: dict[str, callable] = {
     "get_contact_email": get_contact_email,
-    "compose_email": compose_email
+    "compose_email": compose_email,
 }

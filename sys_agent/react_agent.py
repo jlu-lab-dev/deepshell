@@ -311,7 +311,8 @@ class ReActAgentController(QObject):
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, model: str, session_id: str | None = None):
+    def __init__(self, model: str, session_id: str | None = None,
+                 tool_router=None):
         super().__init__()
         self.model_name = model
         self.session_id = session_id
@@ -321,7 +322,11 @@ class ReActAgentController(QObject):
         self._final_answer: str | None = None     # 捕获最终答案
         self._history: list[str] = []              # 格式化后的历史（注入 Agent）
 
-        # Load all tools from experts.json (same approach as AgentController)
+        # 允许外部传入共享的 ToolRouter 实例，否则按需延迟创建
+        self._tool_router = tool_router
+
+        # Load all tools from experts.json (same approach as before – needed
+        # for get_filtered_* lookups and for non-ReAct code paths)
         self._tool_schemas, self._function_map = self._load_all_tools()
 
     # ── Tool loading ──────────────────────────────────────────────────────
@@ -427,6 +432,56 @@ class ReActAgentController(QObject):
         self._tool_results = []
         self._final_answer = None
 
+        # ── Stage 1 & 2：LLM 路由，筛选工具 ────────────────────────────
+        filtered_schemas = self._tool_schemas
+        filtered_func_map = self._function_map
+
+        try:
+            # 延迟创建 ToolRouter（首次使用时才初始化）
+            if self._tool_router is None:
+                from sys_agent.tool_router import ToolRouter
+                self._tool_router = ToolRouter(self.model_name)
+
+            # UI 提示：正在路由
+            self.workflow_step_started.emit(
+                "react_routing", "正在分析任务并选择工具..."
+            )
+
+            # Stage 1: 专家路由
+            expert_names = self._tool_router.route_experts(user_input)
+            logging.info(f"[ReActController] Routed experts: {expert_names}")
+
+            # Stage 2: 工具精选
+            tool_names = self._tool_router.select_tools(user_input, expert_names)
+            logging.info(f"[ReActController] Selected tools: {tool_names}")
+
+            # 特殊情况：无工具被选中（如 general_fallback_expert 单独被选中）
+            if not tool_names:
+                self.workflow_step_finished.emit(
+                    "react_routing", True,
+                    "路由决策：此问题无需工具，将以普通对话方式回答。"
+                )
+                self.normal_finished_signal.emit("")
+                return
+
+            filtered_schemas = self._tool_router.get_filtered_schemas(tool_names)
+            filtered_func_map = self._tool_router.get_filtered_func_map(tool_names)
+
+            self.workflow_step_finished.emit(
+                "react_routing", True,
+                f"已选择 {len(tool_names)} 个工具"
+            )
+
+        except Exception as e:
+            logging.error(
+                f"[ReActController] Routing failed, using all tools: {e}",
+                exc_info=True,
+            )
+            self.workflow_step_finished.emit(
+                "react_routing", False,
+                f"路由失败，将使用全部工具: {e}"
+            )
+
         def collect_thought(entry: dict):
             self._thought_chain.append(entry)
             # 同时收集工具调用结果（用于记忆持久化）
@@ -448,10 +503,11 @@ class ReActAgentController(QObject):
             if answer:
                 self._history.append(f"助手回答：{answer}")
 
+        # ── 创建 ReActAgent（使用筛选后的工具）──────────────────────────
         agent = ReActAgent(
             model_name=self.model_name,
-            tool_schemas=self._tool_schemas,
-            function_map=self._function_map,
+            tool_schemas=filtered_schemas,
+            function_map=filtered_func_map,
             step_cb=lambda sid, txt: None,   # overwritten by worker
             obs_cb=lambda sid, ok, msg: None,
             final_cb=lambda ans: None,
@@ -474,3 +530,5 @@ class ReActAgentController(QObject):
 
     def switch_model(self, model: str):
         self.model_name = model
+        # 模型切换后丢弃缓存的 router，下次 start_workflow 时按新模型重建
+        self._tool_router = None

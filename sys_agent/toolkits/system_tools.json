@@ -1,162 +1,199 @@
 [
   {
     "name": "open_calculator",
-    "description": "打开计算器",
+    "description": "打开系统自带的计算器应用程序。适用于快速计算场景。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "shutdown_system",
-    "description": "关机系统",
+    "description": "执行系统关机命令。执行前系统会给予 1 秒缓冲时间。此操作不可逆，**请在调用前确认用户意图**。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "run_program",
-    "description": "运行任意命令",
+    "description": "在系统命令行中执行一条完整命令（shell 命令），返回命令的退出码。适用于打开特定程序、运行系统命令等场景。**注意：仅执行简单命令，不要执行交互式或长时间运行的命令**。",
     "parameters": {
       "type": "object",
       "properties": {
         "command": {
           "type": "string",
-          "description": "要运行的命令字符串"
+          "description": "要执行的完整命令行字符串",
+          "examples": ["notepad", "calc", "python --version", "dir"]
         }
       },
       "required": ["command"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "set_wallpaper",
-    "description": "设置桌面壁纸（仅Windows）",
+    "description": "将指定的图片文件设置为系统桌面壁纸。仅支持 Windows 系统。支持 jpg / png / bmp 等常见图片格式。",
     "parameters": {
       "type": "object",
       "properties": {
         "image_path": {
           "type": "string",
-          "description": "要设置为壁纸的图片文件路径"
+          "description": "要设置为壁纸的图片文件的完整路径，必须是本地磁盘上的图片文件",
+          "examples": ["D:\\pics\\wallpaper.jpg", "C:\\Users\\Zhang\\Desktop\\bg.png"]
         }
       },
       "required": ["image_path"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "open_control_panel",
-    "description": "打开控制面板（仅Windows）",
+    "description": "打开 Windows 控制面板（Control Panel）。macOS 和 Linux 不支持此操作。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "open_network_settings",
-    "description": "打开网络设置（仅Windows）",
+    "description": "直接打开系统网络设置页面（Windows: 设置 → 网络和 Internet；macOS: 系统偏好设置 → 网络）。用于快速配置 WiFi、网线、代理等网络参数。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "open_display_settings",
-    "description": "打开显示设置（仅Windows）",
+    "description": "直接打开系统显示设置页面（Windows: 设置 → 系统 → 显示；macOS: 系统偏好设置 → 显示器）。用于调整分辨率、缩放比例、多显示器布局等。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "open_sound_settings",
-    "description": "打开声音设置（仅Windows）",
+    "description": "直接打开系统声音/音频设置页面（Windows: 设置 → 系统 → 声音；macOS: 系统偏好设置 → 声音）。用于调整音量、选择输出设备、管理音频设备等。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "open_bluetooth_settings",
-    "description": "打开蓝牙设置（仅Windows）",
+    "description": "直接打开系统蓝牙设置页面（Windows: 设置 → 设备 → 蓝牙和其他设备；macOS: 系统偏好设置 → 蓝牙）。用于配对和管理蓝牙设备。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "lock_screen",
-    "description": "锁定屏幕（仅Windows）",
+    "description": "立即锁定当前用户会话屏幕（相当于按 Win+L）。锁定后需要重新输入密码或 PIN 才能继续操作。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "list_running_applications",
-    "description": "获取当前用户正在运行的、可以被关闭的应用程序进程列表。用于了解哪些非必要的应用在运行。",
-    "parameters": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  {
-    "name": "close_application_by_name",
-    "description": "根据进程名称（例如 'chrome.exe', 'notepad.exe'）关闭一个或多个正在运行的应用程序。用于释放系统资源。",
-    "parameters": {
+    "description": "获取当前用户会话下所有正在运行的、可以被手动关闭的第三方应用程序进程列表（排除系统关键进程）。用于了解当前打开了哪些程序。",
+    "returns": {
       "type": "object",
       "properties": {
-        "app_name": {
-          "type": "string",
-          "description": "要关闭的应用程序的进程名, 比如 'chrome.exe'"
+        "applications": {
+          "type": "array",
+          "description": "正在运行的非系统进程名称列表（去重、排序）",
+          "items": {
+            "type": "string",
+            "examples": ["chrome.exe", "notepad.exe", "WeChat.exe"]
+          }
         }
-      },
-      "required": ["app_name"]
-    }
-  },
-  {
-    "name": "open_task_manager",
-    "description": "为用户打开操作系统的任务管理器（Windows）、活动监视器（macOS）或系统监视器（Linux）。当用户想要查看系统进程、检查性能或手动结束程序时使用此工具。",
-    "parameters": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "list_applications_by_memory_usage",
-    "description": "获取内存使用量超过指定阈值的用户应用列表。返回每个应用的PID、名称和内存占用情况。阈值单位是MB。",
+    "description": "获取当前用户进程中内存占用超过指定阈值的应用程序列表，按内存占用从高到低排序。返回每个进程的 PID、进程名和内存占用量。",
     "parameters": {
       "type": "object",
       "properties": {
         "memory_threshold_mb": {
           "type": "integer",
-          "description": "要筛选的内存阈值，单位是MB。例如，要查找超过1GB的应用，应传入1024。"
+          "description": "内存占用筛选阈值，单位 MB。例如 500 表示只返回占用超过 500MB 的进程",
+          "minimum": 1,
+          "examples": [100, 500, 1024]
         }
       },
       "required": ["memory_threshold_mb"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "applications": {
+          "type": "array",
+          "description": "符合条件的进程列表，含 pid（整数）、name（字符串）、memory_usage（字符串，如 '120 MB'）",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pid": {"type": "integer"},
+              "name": {"type": "string"},
+              "memory_usage": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "version": "1.0.0"
+  },
+  {
+    "name": "close_application_by_name",
+    "description": "根据进程名称（不含路径，如 'chrome.exe'、'notepad.exe'）关闭所有匹配的正在运行的应用程序进程。使用进程名而非 PID，适合批量关闭同类应用。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "description": "进程的名称（不含路径），不区分大小写匹配",
+          "examples": ["chrome.exe", "notepad.exe", "WeChat.exe", "code.exe"]
+        }
+      },
+      "required": ["app_name"]
+    },
+    "version": "1.0.0"
   },
   {
     "name": "close_application_by_pid",
-    "description": "根据一个进程的唯一ID（PID）来精确地关闭该进程。当需要确保关闭的是特定进程时使用。",
+    "description": "根据进程 ID（PID）精确关闭指定进程。当需要确保关闭的是特定进程（如同名应用的某个实例）时使用 PID 比名称更可靠。",
     "parameters": {
       "type": "object",
       "properties": {
         "pid": {
           "type": "integer",
-          "description": "要关闭的进程的PID"
+          "description": "目标进程的 PID（正整数）。可通过 list_applications_by_memory_usage 获取",
+          "examples": [12340, 8848]
         }
       },
       "required": ["pid"]
-    }
+    },
+    "version": "1.0.0"
+  },
+  {
+    "name": "open_task_manager",
+    "description": "打开系统任务管理器（Windows: taskmgr.exe；macOS: Activity Monitor；Linux: gnome-system-monitor）。用于查看系统进程、检查性能瓶颈、手动结束无响应的程序。",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    },
+    "version": "1.0.0"
   }
 ]

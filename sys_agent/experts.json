@@ -1,38 +1,93 @@
 [
   {
     "name": "file_management_expert",
-    "description": "处理文件和目录操作，如创建、读写、复制、移动、删除、查找文件。",
+    "description": "处理文件和目录操作，包括创建、读取、写入、复制、移动、删除、查找文件，以及读取和保存表格/文档数据。",
+    "category": "文件系统",
+    "tags": ["文件", "目录", "文件夹", "查找", "复制", "移动", "删除", "表格", "CSV", "Excel", "Word", "路径"],
+    "routing_examples": [
+      "帮我找一下D盘下的报告文件",
+      "把桌面上的图片移到Downloads文件夹",
+      "读取这个CSV文件并分析",
+      "在当前目录搜索所有.py文件",
+      "创建一个新文件夹",
+      "删除E盘下的旧日志"
+    ],
     "tools_definition_file": "toolkits/file_management_tools.json",
-    "tools_implementation_module": "sys_agent.toolkits.file_management_tools"
+    "tools_implementation_module": "sys_agent.toolkits.file_management_tools",
+    "version": "1.0.0"
   },
   {
     "name": "browser_expert",
-    "description": "负责与浏览器相关的操作，如打开浏览器、进行网络搜索。",
+    "description": "与浏览器和网络相关的操作，包括打开浏览器、搜索关键词、管理浏览器书签页等。",
+    "category": "浏览器",
+    "tags": ["浏览器", "搜索", "网页", "网络", "Google", "Bing", "Baidu", "打开网页"],
+    "routing_examples": [
+      "帮我用Google搜索最新的人工智能新闻",
+      "打开浏览器",
+      "搜索一下Python教程"
+    ],
     "tools_definition_file": "toolkits/browser_tools.json",
-    "tools_implementation_module": "sys_agent.toolkits.browser_tools"
+    "tools_implementation_module": "sys_agent.toolkits.browser_tools",
+    "version": "1.0.0"
   },
   {
     "name": "data_analysis_expert",
-    "description": "负责处理和分析结构化数据，例如从表格数据中提取见解、生成摘要或报告。",
+    "description": "处理和分析结构化数据，根据表格数据（如销售记录、财务数据）生成专业的分析报告、周报或数据摘要。",
+    "category": "数据分析",
+    "tags": ["数据分析", "报告", "周报", "图表", "表格", "统计", "生成报告", "数据摘要"],
+    "routing_examples": [
+      "根据这些销售数据生成一份周报",
+      "分析一下这份Excel中的数据趋势",
+      "把表格数据生成一个分析报告"
+    ],
     "tools_definition_file": "toolkits/data_analysis_tools.json",
-    "tools_implementation_module": "sys_agent.toolkits.data_analysis_tools"
+    "tools_implementation_module": "sys_agent.toolkits.data_analysis_tools",
+    "version": "1.0.0"
   },
   {
     "name": "communication_expert",
-    "description": "负责通讯任务，例如发送电子邮件、查询联系人信息。",
+    "description": "通讯相关任务，包括查询联系人邮箱地址、创建邮件草稿（自动填入收件人、主题、正文和附件路径）。",
+    "category": "通讯",
+    "tags": ["邮件", "Email", "联系人", "发邮件", "通信", "收件人", "附件"],
+    "routing_examples": [
+      "帮我给周总发一封邮件",
+      "查询一下李经理的邮箱",
+      "把这份报告发给张总"
+    ],
     "tools_definition_file": "toolkits/communication_tools.json",
-    "tools_implementation_module": "sys_agent.toolkits.communication_tools"
+    "tools_implementation_module": "sys_agent.toolkits.communication_tools",
+    "version": "1.0.0"
   },
   {
     "name": "system_expert",
-    "description": "负责与操作系统相关的操作，如打开控制面板、打开蓝牙设置。",
+    "description": "操作系统级别的操作和控制面板功能，包括打开系统设置（网络、蓝牙、声音、显示）、开关程序、设置壁纸、锁屏、关机、查看和管理运行中的应用程序等。",
+    "category": "系统控制",
+    "tags": ["系统", "控制面板", "设置", "壁纸", "关机", "锁屏", "应用程序", "进程", "任务管理器", "内存", "网络", "蓝牙", "声音", "显示"],
+    "routing_examples": [
+      "把桌面壁纸换成D:\\pics\\new.jpg",
+      "打开任务管理器",
+      "查看内存占用最高的程序",
+      "关闭所有Chrome浏览器进程",
+      "锁定屏幕",
+      "打开网络设置"
+    ],
     "tools_definition_file": "toolkits/system_tools.json",
-    "tools_implementation_module": "sys_agent.toolkits.system_tools"
+    "tools_implementation_module": "sys_agent.toolkits.system_tools",
+    "version": "1.0.0"
   },
   {
     "name": "general_fallback_expert",
-    "description": "当其他专家都无法处理用户的请求时，由我来尝试回答。适用于无法通过工具完成的通用问题或闲聊。",
+    "description": "通用问答和闲聊专家。当用户的问题是纯知识问答、寒暄、玩笑或任何不需要使用工具的情况时，由本专家直接回答。",
+    "category": "通用",
+    "tags": ["闲聊", "问答", "知识", "百科", "你好", "介绍", "解释"],
+    "routing_examples": [
+      "你好",
+      "你是谁",
+      "今天天气怎么样",
+      "介绍一下人工智能"
+    ],
     "tools_definition_file": null,
-    "tools_implementation_module": null
+    "tools_implementation_module": null,
+    "version": "1.0.0"
   }
 ]

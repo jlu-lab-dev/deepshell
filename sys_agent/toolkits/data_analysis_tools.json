@@ -1,14 +1,32 @@
 [
   {
     "name": "generate_report_text",
-    "description": "根据提供的结构化数据和用户要求（如“生成周报”），仅撰写并返回分析报告的文本内容。",
+    "description": "调用大语言模型分析提供的结构化表格数据，生成专业的分析报告文本（如周报、月报、数据摘要等）。数据行数超过 200 行时会自动截取前 200 行并告知用户截断情况。",
     "parameters": {
       "type": "object",
       "properties": {
-        "table_data": { "type": "array", "description": "JSON格式的表格数据" },
-        "user_request": { "type": "string", "description": "用户的具体要求" }
+        "table_data": {
+          "type": "array",
+          "description": "从 read_table_data 工具返回的表格数据（JSON 格式的记录列表，每项为一行，key 为列名）",
+          "examples": [[{"日期": "2024-01-01", "销售额": 12500, "产品": "A类"}, {"日期": "2024-01-02", "销售额": 13800, "产品": "B类"}]]
+        },
+        "user_request": {
+          "type": "string",
+          "description": "用户对报告的具体要求，用于指导 AI 分析的方向和重点",
+          "examples": ["生成一份周报，包含本周销售总额、同比变化、主要产品表现", "分析月度财务数据，标注异常点", "提取客户数据的关键指标和趋势"]
+        }
       },
       "required": ["table_data", "user_request"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "report_text": {
+          "type": "string",
+          "description": "AI 生成的分析报告文本内容（自然语言，可直接展示给用户或存入文件）"
+        }
+      }
+    },
+    "version": "1.0.0"
   }
 ]

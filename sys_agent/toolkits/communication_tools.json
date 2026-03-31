@@ -1,30 +1,58 @@
 [
   {
     "name": "get_contact_email",
-    "description": "根据联系人姓名查询其电子邮件地址。",
+    "description": "根据联系人姓名查询其已登记的电子邮件地址。联系人数据库预置在系统配置中（请参考工具返回的示例联系人）。如联系人不在数据库中，返回失败结果。",
     "parameters": {
       "type": "object",
       "properties": {
         "contact_name": {
           "type": "string",
-          "description": "要查询的联系人的姓名，例如 '周总'"
+          "description": "要查询的联系人姓名（需与通讯录中姓名完全匹配）",
+          "examples": ["周总", "李经理", "张总监"]
         }
       },
       "required": ["contact_name"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "查询到的邮箱地址"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "compose_email",
-    "description": "打开用户的默认邮件客户端，创建一个新的邮件草稿，并填好收件人、主题和正文。它还会提示用户手动添加一个附件。",
+    "description": "打开系统默认邮件客户端，创建一个预填好收件人、主题、正文的邮件草稿。如果需要附加文件，系统会在正文中提示用户手动添加附件路径。注意：附件不会自动附加，需用户在邮件客户端中手动添加。",
     "parameters": {
       "type": "object",
       "properties": {
-        "recipient_email": { "type": "string", "description": "收件人的电子邮件地址" },
-        "subject": { "type": "string", "description": "邮件的主题" },
-        "body": { "type": "string", "description": "邮件的正文内容" },
-        "attachment_path": { "type": "string", "description": "需要作为附件的文件的完整路径" }
+        "recipient_email": {
+          "type": "string",
+          "description": "收件人的完整邮件地址",
+          "examples": ["zhou@company.com", "li.manager@gmail.com"]
+        },
+        "subject": {
+          "type": "string",
+          "description": "邮件主题行",
+          "examples": ["项目进度汇报 - 2024年Q1", "月度销售报告", "会议纪要"]
+        },
+        "body": {
+          "type": "string",
+          "description": "邮件正文内容（纯文本），建议包含适当的段落和说明",
+          "examples": ["您好，附件为本月销售数据报告，请查收。", "张总，以下是本次季度会议的讨论要点..."]
+        },
+        "attachment_path": {
+          "type": "string",
+          "description": "需要附带的文件完整路径。系统会在草稿正文中提醒用户添加此附件",
+          "examples": ["D:\\reports\\sales_monthly.pdf", "E:\\data\\analysis.docx"]
+        }
       },
       "required": ["recipient_email", "subject", "body", "attachment_path"]
-    }
+    },
+    "version": "1.0.0"
   }
 ]

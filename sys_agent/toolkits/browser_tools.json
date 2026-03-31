@@ -1,30 +1,33 @@
 [
   {
     "name": "open_browser",
-    "description": "打开默认浏览器",
+    "description": "打开系统默认浏览器的空白页（新标签页）。适用于初始化浏览器环境，或在用户需要查看网页但未指定具体 URL 时使用。",
     "parameters": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {}
+    },
+    "version": "1.0.0"
   },
   {
     "name": "search_in_browser",
-    "description": "在默认浏览器中搜索指定关键词，可选择搜索引擎（google、bing、baidu）",
+    "description": "在浏览器中打开指定关键词的搜索引擎搜索结果页面。支持 Google、Bing、Baidu 三个搜索引擎。URL 和关键词均经过自动编码处理，可正确处理中文和特殊字符。",
     "parameters": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "要搜索的内容"
+          "description": "要搜索的关键词或问题。搜索引擎会据此返回相关结果页面，用户需在浏览器中查看",
+          "examples": ["Python 入门教程", "2024年最新科技趋势", "DeepSeek API 使用方法"]
         },
         "engine": {
           "type": "string",
-          "description": "搜索引擎，支持 google、bing、baidu",
-          "default": "bing"
+          "description": "（可选）使用的搜索引擎，默认为 bing。可选值: google | bing | baidu",
+          "default": "bing",
+          "enum": ["google", "bing", "baidu"]
         }
       },
       "required": ["query"]
-    }
+    },
+    "version": "1.0.0"
   }
 ]

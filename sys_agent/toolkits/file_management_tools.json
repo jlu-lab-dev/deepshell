@@ -1,216 +1,291 @@
 [
   {
     "name": "get_user_folder_path",
-    "description": "获取当前用户特定标准文件夹（如 'Downloads', 'Documents', 'Desktop'）的完整路径。",
+    "description": "获取当前用户系统中标准文件夹（如 'Downloads'、'Documents'、'Desktop'）的完整磁盘路径。这是一个基础工具，常用于拼接其他文件操作的目标路径。",
     "parameters": {
       "type": "object",
       "properties": {
         "folder_name": {
           "type": "string",
-          "description": "标准文件夹的名称，例如 'Downloads'"
+          "description": "标准文件夹的名称。推荐使用: Downloads | Documents | Desktop | Pictures | Music | Videos",
+          "examples": ["Downloads", "Documents", "Desktop"]
         }
       },
       "required": ["folder_name"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "该文件夹在当前系统上的完整路径"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "open_file",
-    "description": "打开指定路径的文件",
+    "description": "使用系统默认程序打开指定路径的文件（相当于 Windows 的双击文件 / macOS 的 open 命令）。支持任意文件类型，不支持 URL。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要打开的文件路径"
+          "description": "文件的完整路径，支持绝对路径或带 ~ 的路径。例如: D:\\report.pdf 或 ~/Desktop/notes.txt",
+          "examples": ["D:\\report.pdf", "C:\\Users\\Zhang\\Desktop\\summary.docx", "~/Downloads/data.csv"]
         }
       },
       "required": ["path"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "create_file",
-    "description": "创建新文件并可写入内容",
+    "description": "创建一个新的空文件，或写入初始内容后创建文件。目录不存在时会自动创建父目录。如果文件已存在则返回错误，不会覆盖已有文件。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要创建的文件路径"
+          "description": "新建文件的完整路径",
+          "examples": ["D:\\new_project\\readme.txt", "~/Desktop/report.md"]
         },
         "content": {
           "type": "string",
-          "description": "要写入文件的内容，可选"
+          "description": "（可选）文件初始内容。如果为空或不提供，则创建空文件",
+          "examples": ["# Hello World\n\n这是文件内容。"]
         }
       },
       "required": ["path"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "read_file",
-    "description": "读取文件内容",
+    "description": "读取指定文本文件（UTF-8 编码）的全部内容并返回。适用于 .txt、.md、.json、.py、.yaml 等纯文本文件。不适用于二进制文件（图片、音视频、压缩包等）。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要读取的文件路径"
+          "description": "待读取文件的完整路径",
+          "examples": ["D:\\logs\\app.log", "~/Documents/notes.md"]
         }
       },
       "required": ["path"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "文件的完整文本内容"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "write_file",
-    "description": "写入内容到文件（覆盖）",
+    "description": "向指定路径写入内容，**覆盖**已有文件（如果存在）。如果需要追加内容，请先 read_file 合并后再 write_file。适用于写入报告文本、配置内容、日志等。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要写入的文件路径"
+          "description": "目标文件路径。如果文件已存在则覆盖",
+          "examples": ["D:\\output\\result.txt", "~/Desktop/summary.txt"]
         },
         "content": {
           "type": "string",
-          "description": "要写入的内容"
+          "description": "要写入的完整文本内容"
         }
       },
       "required": ["path", "content"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "rename_file",
-    "description": "重命名文件或文件夹",
+    "description": "重命名文件或文件夹。目标名称只需提供文件名本身（不含路径），系统会在同一目录下完成重命名。不可用于跨目录移动（请使用 move_file）。",
     "parameters": {
       "type": "object",
       "properties": {
         "src": {
           "type": "string",
-          "description": "原始路径"
+          "description": "原文件/文件夹的完整路径",
+          "examples": ["D:\\docs\\report_v1.pdf", "~/Desktop/old_name.txt"]
         },
         "dst": {
           "type": "string",
-          "description": "目标路径"
+          "description": "新的名称（仅文件名，不含目录路径）",
+          "examples": ["report_v2.pdf", "new_name.txt"]
         }
       },
       "required": ["src", "dst"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "copy_file",
-    "description": "复制文件",
+    "description": "将文件复制到目标路径。如果目标路径是一个已存在的目录，则复制到该目录下并保持原文件名。相当于 shell 的 cp 命令。",
     "parameters": {
       "type": "object",
       "properties": {
         "src": {
           "type": "string",
-          "description": "源文件路径"
+          "description": "源文件的完整路径",
+          "examples": ["D:\\source\\data.csv"]
         },
         "dst": {
           "type": "string",
-          "description": "目标文件路径"
+          "description": "目标路径（可以是完整文件路径，也可以是目录路径）",
+          "examples": ["E:\\backup\\data.csv", "~/Desktop"]
         }
       },
       "required": ["src", "dst"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "move_file",
-    "description": "移动文件",
+    "description": "将文件或文件夹移动到目标位置。相当于 shell 的 mv 命令。如果目标是目录，文件将移入该目录。",
     "parameters": {
       "type": "object",
       "properties": {
         "src": {
           "type": "string",
-          "description": "源文件路径"
+          "description": "源文件/文件夹的完整路径",
+          "examples": ["D:\\temp\\upload.xlsx", "~/Desktop/old_folder"]
         },
         "dst": {
           "type": "string",
-          "description": "目标文件路径"
+          "description": "目标路径（可以是目录路径或完整文件路径）",
+          "examples": ["D:\\archive\\upload.xlsx", "E:\\new_folder"]
         }
       },
       "required": ["src", "dst"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "batch_move_files",
-    "description": "将一个文件路径列表中的所有文件，一次性地移动到另一个目标文件夹中。",
+    "description": "将多个文件一次性移动到同一个目标文件夹中。适用于整理文件夹、将一批文件归档到统一目录等场景。",
     "parameters": {
       "type": "object",
       "properties": {
         "file_paths": {
           "type": "array",
-          "description": "需要被移动的文件的完整路径列表。",
-          "items": { "type": "string" }
+          "description": "所有待移动文件的完整路径列表",
+          "items": {
+            "type": "string",
+            "examples": ["D:\\temp\\file1.pdf", "D:\\temp\\file2.pdf", "D:\\temp\\file3.pdf"]
+          }
         },
         "destination_directory": {
           "type": "string",
-          "description": "所有文件将被移入的目标文件夹的路径。"
+          "description": "所有文件将被移入的目标目录路径，该目录必须已存在",
+          "examples": ["D:\\archive\\2024", "E:\\backup\\monthly"]
         }
       },
       "required": ["file_paths", "destination_directory"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "success_details": {
+          "type": "array",
+          "description": "移动成功的文件列表，每项含原路径和目标路径"
+        },
+        "failure_details": {
+          "type": "array",
+          "description": "移动失败的文件列表，每项含原路径和错误原因"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "create_directory",
-    "description": "创建一个新的文件夹。可以通过 'base_directory' 参数指定在哪个父文件夹下创建。",
+    "description": "创建一个新的文件夹（目录）。如果提供了 base_directory，则在其下创建子目录。支持自动创建多层嵌套目录（相当于 mkdir -p）。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要创建的文件夹的名称，例如 '我的新文件夹'。"
+          "description": "要创建的文件夹名称或完整路径",
+          "examples": ["new_folder", "D:\\projects\\my_app\\src"]
         },
         "base_directory": {
           "type": "string",
-          "description": "(可选) 父文件夹的路径。如果提供了这个参数，'path' 指定的文件夹将被创建在这个父文件夹内部。"
+          "description": "（可选）父目录路径。如果提供，path 将被视为其下的相对子目录名",
+          "examples": ["D:\\projects", "~/Desktop"]
         }
       },
-      "required": [
-        "path"
-      ]
-    }
+      "required": ["path"]
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "directory_path": {
+          "type": "string",
+          "description": "最终创建的目录的完整路径"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "delete_file",
-    "description": "删除指定文件",
+    "description": "删除指定的文件（不是文件夹）。删除后文件无法恢复，请确认路径正确。此操作不会移动到回收站。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要删除的文件路径"
+          "description": "待删除文件的完整路径",
+          "examples": ["D:\\temp\\old_log.txt", "~/Desktop\\draft_v0.txt"]
         }
       },
       "required": ["path"]
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "get_current_directory",
-    "description": "获取当前工作目录",
-    "parameters": {
+    "description": "获取当前 Python 进程的工作目录（CWD）。这个目录是相对路径操作的基准路径。",
+    "returns": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "当前工作目录的完整路径"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "find_file",
-    "description": "在指定目录及其子目录下查找文件，返回所有匹配的文件路径列表",
+    "description": "在指定目录及其所有子目录中递归搜索文件名包含指定关键词的文件，返回所有匹配项的完整路径列表。支持模糊匹配（文件名中含关键词即匹配）。",
     "parameters": {
       "type": "object",
       "properties": {
         "filename": {
           "type": "string",
-          "description": "要查找的文件名（支持部分匹配或全名）"
+          "description": "文件名关键词（支持模糊匹配，不区分大小写）。可以只输入部分文件名，如 '报告'、'report'、'.pdf'",
+          "examples": ["财报", "report", "data", ".pdf", "config.yaml"]
         },
         "path": {
           "type": "string",
-          "description": "起始查找目录，默认为当前目录",
-          "default": "."
+          "description": "（可选）搜索起始目录，默认为当前工作目录",
+          "default": ".",
+          "examples": ["D:\\", "C:\\Users\\Zhang\\Desktop", "~/Downloads"]
         },
         "nums": {
           "type": "integer",
-          "description": "最多返回的匹配文件数，-1表示不限制",
+          "description": "（可选）最多返回的匹配数量。-1 表示不限制，返回所有匹配项",
           "default": -1
         }
       },
@@ -219,25 +294,24 @@
     "returns": {
       "type": "object",
       "properties": {
-        "success": { "type": "boolean" },
-        "message": { "type": "string" },
         "found_paths": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "一个包含所有找到的文件完整路径的列表。"
+          "description": "所有匹配文件的完整路径列表"
         }
       }
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "read_table_data",
-    "description": "读取指定路径的表格文件（如 .csv, .xlsx）的内容，并将其作为结构化数据返回。",
+    "description": "读取指定路径的表格文件（.csv / .xlsx / .xls）并将其转换为结构化的 JSON 列表返回，每行对应一条字典记录。返回结果可直接传给 data_analysis_expert 生成报告。",
     "parameters": {
       "type": "object",
       "properties": {
         "path": {
           "type": "string",
-          "description": "要读取的表格文件的路径"
+          "description": "表格文件的完整路径",
+          "examples": ["D:\\data\\sales.csv", "E:\\reports\\monthly.xlsx", "~/Desktop/records.xls"]
         }
       },
       "required": ["path"]
@@ -247,58 +321,87 @@
       "properties": {
         "table_data": {
           "type": "array",
-          "description": "从表格中读取并转换为JSON格式的数据列表。"
+          "description": "JSON 格式的表格数据列表，每项为一行，key 为列名，value 为单元格值"
         }
       }
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "save_text_as_word_doc",
-    "description": "将一段文本内容保存到指定目录下的一个 Word (.docx) 文件中。",
+    "description": "将一段文本内容保存为 Word 文档（.docx 格式）。适用于生成格式规范的报告、合同、文案等。文件会自动保存到指定目录。",
     "parameters": {
       "type": "object",
       "properties": {
-        "directory": { "type": "string", "description": "文件要保存到的目录路径，推荐用户目录下的桌面目录" },
-        "filename": { "type": "string", "description": "Word 文档的文件名 (带或不带.docx后缀)" },
-        "content": { "type": "string", "description": "要写入文件的文本内容" }
+        "directory": {
+          "type": "string",
+          "description": "保存目录的路径，目录必须已存在",
+          "examples": ["D:\\reports", "C:\\Users\\Zhang\\Desktop", "~/Desktop"]
+        },
+        "filename": {
+          "type": "string",
+          "description": "文件名（可带或不带 .docx 后缀，系统会自动补充）",
+          "examples": ["销售周报_2024_01", "meeting_notes", "项目总结报告.docx"]
+        },
+        "content": {
+          "type": "string",
+          "description": "要写入 Word 文档的完整文本内容"
+        }
       },
       "required": ["directory", "filename", "content"]
     },
     "returns": {
       "type": "object",
       "properties": {
-        "success": { "type": "boolean" },
-        "message": { "type": "string" },
         "file_path": {
           "type": "string",
-          "description": "Word文件的完整路径。"
+          "description": "保存后的 Word 文件的完整路径"
         }
       }
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "clean_system_cache",
-    "description": "清理操作系统的主要临时文件和缓存目录，用于解决电脑卡顿问题或释放磁盘空间。",
-    "parameters": {
+    "description": "清理操作系统的主要临时文件和缓存目录，释放磁盘空间。适用于解决磁盘空间不足或系统运行缓慢的问题。不同系统清理的目录不同（Windows: TEMP；macOS: ~/Library/Caches；Linux: ~/.cache）。",
+    "returns": {
       "type": "object",
-      "properties": {},
-      "required": []
-    }
+      "properties": {
+        "cleaned_files_count": {
+          "type": "integer",
+          "description": "删除的文件数量"
+        },
+        "cleaned_folders_count": {
+          "type": "integer",
+          "description": "删除的子文件夹数量"
+        },
+        "freed_space_mb": {
+          "type": "number",
+          "description": "释放的磁盘空间，单位 MB"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "find_files_by_extension",
-    "description": "在一个指定的文件夹内（不包括子文件夹），根据文件扩展名列表来查找所有匹配的文件。用于批量筛选特定类型的文件。",
+    "description": "在指定目录（不含子目录）中查找所有匹配指定扩展名的文件，返回文件路径列表。适用于批量筛选特定类型的文件，如所有 .csv 文件或所有图片。",
     "parameters": {
       "type": "object",
       "properties": {
         "directory": {
           "type": "string",
-          "description": "要进行搜索的文件夹的路径。"
+          "description": "待搜索的目录路径（仅搜索该目录，不会递归子目录）",
+          "examples": ["D:\\data", "C:\\Users\\Zhang\\Downloads", "~/Desktop"]
         },
         "extensions": {
           "type": "array",
-          "description": "一个包含文件扩展名的列表，例如 ['.jpg', '.png', '.docx']。",
-          "items": { "type": "string" }
+          "description": "要匹配的文件扩展名列表（不区分大小写，需包含点号）",
+          "items": {
+            "type": "string",
+            "examples": [".csv", ".xlsx", ".pdf", ".docx", ".jpg"]
+          },
+          "examples": [[".csv", ".xlsx"], [".jpg", ".png", ".gif"], [".pdf"]]
         }
       },
       "required": ["directory", "extensions"]
@@ -306,73 +409,121 @@
     "returns": {
       "type": "object",
       "properties": {
-        "found_paths": {
+        "file_paths": {
           "type": "array",
-          "description": "匹配度递减的路径列表"
+          "description": "所有匹配文件的完整路径列表"
         }
       }
-    }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "batch_rename_files",
-    "description": "对一个文件列表进行批量重命名。重命名格式中必须包含 '{num}' 作为自动递增的编号占位符。",
+    "description": "根据指定格式批量重命名一组文件。格式串中必须包含 '{num}' 占位符，系统会自动替换为递增序号。可配合 find_file 的结果使用。",
     "parameters": {
       "type": "object",
       "properties": {
         "file_paths": {
           "type": "array",
-          "description": "需要被重命名的文件的完整路径列表。",
-          "items": { "type": "string" }
+          "description": "待重命名文件的完整路径列表（按列表顺序编号）",
+          "items": {
+            "type": "string",
+            "examples": ["D:\\photos\\img_001.jpg", "D:\\photos\\img_002.jpg"]
+          }
         },
         "rename_pattern": {
           "type": "string",
-          "description": "新的文件名格式，例如 '活动照片-{num}' 或 'report_{num}'。"
+          "description": "新文件名的格式模板，必须包含 {num} 占位符（会被替换为序号）",
+          "examples": ["活动照片-{num}", "report_{num}", "备份_{num:03d}"]
         },
         "start_number": {
           "type": "integer",
-          "description": "编号的起始数字，默认为 1。"
+          "description": "（可选）编号的起始数字，默认为 1",
+          "default": 1,
+          "examples": [1, 100, 0]
         }
       },
       "required": ["file_paths", "rename_pattern"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "success_details": {
+          "type": "array",
+          "description": "重命名成功列表，含 from/to 路径"
+        },
+        "failure_details": {
+          "type": "array",
+          "description": "重命名失败列表，含原路径和错误原因"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "batch_add_prefix_to_filenames",
-    "description": "对一个文件列表中的所有文件，在它们现有文件名的最前面统一添加一个指定的前缀。",
+    "description": "为一个文件列表中的所有文件，在现有文件名前统一添加一个前缀字符串。适用于批量标记文件，如给一批截图加上 '截图_' 前缀。",
     "parameters": {
       "type": "object",
       "properties": {
         "file_paths": {
           "type": "array",
-          "description": "需要添加前缀的文件的完整路径列表。",
-          "items": { "type": "string" }
+          "description": "待添加前缀的文件的完整路径列表",
+          "items": {
+            "type": "string",
+            "examples": ["D:\\screenshots\\001.png", "D:\\screenshots\\002.png"]
+          }
         },
         "prefix": {
           "type": "string",
-          "description": "要添加到每个文件名前面的文本前缀。"
+          "description": "要添加到每个文件名前面的前缀字符串",
+          "examples": ["截图_", "备份_", "v1.0_"]
         }
       },
       "required": ["file_paths", "prefix"]
-    }
+    },
+    "returns": {
+      "type": "object",
+      "properties": {
+        "success_details": {
+          "type": "array",
+          "description": "成功重命名的文件，含 from/to 路径"
+        },
+        "failure_details": {
+          "type": "array",
+          "description": "失败的文件，含原路径和错误原因"
+        }
+      }
+    },
+    "version": "1.0.0"
   },
   {
     "name": "find_path_by_keywords",
-    "description": "通过一组关键词，在指定目录的有限深度内模糊查找文件或文件夹。返回一个按匹配度排序的路径列表。非常适合用于根据用户模糊描述定位初始目标文件夹。",
+    "description": "通过一组关键词在指定目录的有限深度内模糊查找文件和文件夹，按匹配度（命中关键词数量）从高到低排序返回。适用于用户给出模糊描述时定位目标路径，如用户说'找季度汇报的文件夹'。",
     "parameters": {
       "type": "object",
       "properties": {
         "keywords": {
           "type": "array",
-          "description": "从用户指令中提取的核心关键词列表。例如，对于'待处理的季度资料'，关键词可以是 ['季度', '资料', '待处理']。",
-          "items": { "type": "string" }
+          "description": "从用户指令中提取的核心关键词列表，每个关键词独立匹配文件名",
+          "items": {
+            "type": "string",
+            "examples": ["季度", "汇报", "Q1", "2024"]
+          },
+          "examples": [["季度", "资料"], ["报告", "2024", "PDF"], ["照片", "旅行"]]
         },
         "search_directory": {
           "type": "string",
-          "description": "开始搜索的根目录路径，例如用户的桌面路径。"
+          "description": "搜索的起始根目录",
+          "examples": ["C:\\Users\\Zhang\\Desktop", "D:\\", "~/Documents"]
         },
         "search_depth": {
           "type": "integer",
-          "description": "向下搜索的子目录层数限制，默认为3层。"
+          "description": "（可选）向下搜索的最大子目录层数，默认为 3 层。设为 1 则只搜索指定目录本身",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "examples": [3, 5, 1]
         }
       },
       "required": ["keywords", "search_directory"]
@@ -382,9 +533,10 @@
       "properties": {
         "found_paths": {
           "type": "array",
-          "description": "匹配度递减的路径列表"
+          "description": "按匹配度从高到低排序的文件/文件夹路径列表"
         }
       }
-    }
+    },
+    "version": "1.0.0"
   }
 ]
