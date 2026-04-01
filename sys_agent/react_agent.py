@@ -7,6 +7,7 @@ import logging
 import re
 import os
 import importlib
+import uuid
 
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
@@ -113,8 +114,13 @@ class ReActAgent:
             first_msg = first_msg + f"\n__RAG_DOCS_JSON__:{json.dumps(self.rag_docs, ensure_ascii=False)}\n"
         messages.append(first_msg)
 
-        # Agent 内部 LLM 调用使用派生的 session_id，避免与普通 Chat 记忆混淆
-        agent_llm_session = f"react_agent_{self.session_id}" if self.session_id else None
+        # 每次运行使用唯一的 session_id，确保 system_prompt（含工具列表）
+        # 被正确注入。复用同一 session 会导致 _prepare_messages 跳过新
+        # system_prompt，模型看到的是旧工具列表。
+        agent_llm_session = (
+            f"react_agent_{self.session_id}_{uuid.uuid4().hex[:8]}"
+            if self.session_id else None
+        )
 
         for iteration in range(1, MAX_ITERATIONS + 1):
             if self.stop_flag():
@@ -455,17 +461,13 @@ class ReActAgentController(QObject):
             tool_names = self._tool_router.select_tools(user_input, expert_names)
             logging.info(f"[ReActController] Selected tools: {tool_names}")
 
-            # 特殊情况：无工具被选中（如 general_fallback_expert 单独被选中）
-            if not tool_names:
-                self.workflow_step_finished.emit(
-                    "react_routing", True,
-                    "路由决策：此问题无需工具，将以普通对话方式回答。"
-                )
-                self.normal_finished_signal.emit("")
-                return
-
-            filtered_schemas = self._tool_router.get_filtered_schemas(tool_names)
-            filtered_func_map = self._tool_router.get_filtered_func_map(tool_names)
+            # 即使 tool_names 为空（如 general_fallback_expert 单独被选中），
+            # 仍然走 ReAct 循环 —— system_prompt 中已有"无需工具直接回答"的兜底逻辑，
+            # LLM 会基于 self.history（对话上下文）生成回复。
+            # 如果强行早退并 emit normal_finished_signal，该信号在 main_window
+            # 中未被连接，UI 会永远卡住等待 finished_signal。
+            filtered_schemas = self._tool_router.get_filtered_schemas(tool_names) if tool_names else []
+            filtered_func_map = self._tool_router.get_filtered_func_map(tool_names) if tool_names else {}
 
             self.workflow_step_finished.emit(
                 "react_routing", True,
