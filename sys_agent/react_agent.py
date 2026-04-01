@@ -80,7 +80,8 @@ class ReActAgent:
                  thought_chain_collector=None,
                  session_id: str | None = None,
                  history: list | None = None,
-                 rag_docs: list | None = None):
+                 rag_docs: list | None = None,
+                 pre_filled_actions: list[dict] | None = None):
         self.model_name = model_name
         self.tool_schemas = tool_schemas
         self.function_map = function_map
@@ -93,7 +94,9 @@ class ReActAgent:
         self.session_id = session_id
         self.history = history or []
         self.rag_docs = rag_docs or []
-        self.tool_results: list[dict] = []  # 收集本次运行的工具调用结果
+        self.tool_results: list[dict] = []
+        self.pre_filled_actions = pre_filled_actions or []  # Stage 3 规划的工具调用
+        self._pending_action: dict | None = None  # 预填充后 LLM 回复中解析出的待执行 Action
 
         self.model_manager = ModelManager()
         self._load_prompt()
@@ -122,6 +125,127 @@ class ReActAgent:
             if self.session_id else None
         )
 
+        # ── 预填充动作：先执行 Stage 3 预生成的工具调用 ──────────────────
+        if self.pre_filled_actions:
+            for action in self.pre_filled_actions:
+                if self.stop_flag():
+                    return
+
+                tool_name = action.get("tool", "")
+                tool_args = action.get("args", {})
+
+                act_step_id = f"react_prefill_{tool_name}"
+                self.step_cb(act_step_id, f"执行预填充工具: {tool_name}")
+
+                if tool_name not in self.function_map:
+                    obs_text = f"错误：预填充工具 '{tool_name}' 不存在"
+                    self.obs_cb(act_step_id, False, obs_text)
+                    if self.thought_chain_collector:
+                        self.thought_chain_collector({
+                            "iteration": 0,
+                            "thought": f"预填充动作: {tool_name}",
+                            "action": action,
+                            "observation": obs_text,
+                            "success": False,
+                        })
+                    # 预填充失败，回退到正常 ReAct 循环
+                    break
+
+                try:
+                    result = self.function_map[tool_name](**tool_args)
+                except Exception as e:
+                    obs_text = f"预填充工具执行异常: {e}"
+                    self.obs_cb(act_step_id, False, obs_text)
+                    if self.thought_chain_collector:
+                        self.thought_chain_collector({
+                            "iteration": 0,
+                            "thought": f"预填充动作: {tool_name}",
+                            "action": action,
+                            "observation": obs_text,
+                            "success": False,
+                        })
+                    break
+
+                success = result.get('success', False)
+                obs_message = result.get('message', str(result))
+                self.obs_cb(act_step_id, success, obs_message)
+
+                if self.thought_chain_collector:
+                    self.thought_chain_collector({
+                        "iteration": 0,
+                        "thought": f"预填充动作: {tool_name}",
+                        "action": action,
+                        "observation": obs_message,
+                        "success": success,
+                    })
+
+                if not success:
+                    self.error_cb(f"工具 '{tool_name}' 执行失败: {obs_message}")
+                    return
+
+                # 收集工具调用结果
+                self.tool_results.append({
+                    "tool": tool_name,
+                    "args": tool_args,
+                    "result_summary": obs_message,
+                })
+
+                # 注入 Observation 供后续 ReAct 循环使用
+                obs_json = json.dumps(result, ensure_ascii=False)
+                messages.append(
+                    f"Thought: 已预执行工具 {tool_name}，获取结果。\n"
+                    f"Action: {json.dumps(action, ensure_ascii=False)}"
+                )
+                messages.append(f"Observation: {obs_json}")
+
+            else:
+                # 所有预填充动作都成功执行，让 LLM 基于结果继续推理
+                if self.stop_flag():
+                    return
+
+                step_id = "react_think_final"
+                self.step_cb(step_id, "生成最终回复...")
+                try:
+                    response = self.model_manager.chat(
+                        model_name=self.model_name,
+                        messages=messages,
+                        system_prompt=self.system_prompt,
+                        session_id=agent_llm_session,
+                    )
+                except Exception as e:
+                    self.error_cb(f"模型调用失败: {e}")
+                    return
+
+                if self.stop_flag():
+                    return
+
+                logging.info(f"[ReAct] prefill-LLM response=\n{response}")
+
+                # ── 检查 LLM 回复是否包含 Action（有则继续推理循环）────────
+                next_action = _extract_action(response)
+                if next_action:
+                    # LLM 回复包含后续 Action → 标记当前步骤完成，进入 ReAct 循环
+                    self.obs_cb(step_id, True, "检测到后续工具调用，继续执行")
+                    messages.append(response)
+                    messages.append("Observation: (等待执行)")
+                    self._pending_action = next_action
+                else:
+                    # 无 Action：检查是否有 Final Answer
+                    final_answer = _extract_final_answer(response)
+                    result_text = final_answer if final_answer else response.strip()
+                    self.obs_cb(step_id, True, result_text)
+                    if self.thought_chain_collector:
+                        self.thought_chain_collector({
+                            "iteration": 1,
+                            "thought": "根据预执行结果生成最终答案",
+                            "action": None,
+                            "observation": result_text,
+                            "success": True,
+                        })
+                    self.final_cb(result_text)
+                    return
+
+        # ── 正常 ReAct 循环 ──────────────────────────────────────────────
         for iteration in range(1, MAX_ITERATIONS + 1):
             if self.stop_flag():
                 return
@@ -129,78 +253,81 @@ class ReActAgent:
             step_id = f"react_think_{iteration}"
             self.step_cb(step_id, f"第 {iteration} 轮 · 思考中...")
 
-            # ── LLM call ─────────────────────────────────────────────────
-            try:
-                response = self.model_manager.chat(
-                    model_name=self.model_name,
-                    messages=messages,
-                    system_prompt=self.system_prompt,
-                    session_id=agent_llm_session,
-                )
-            except Exception as e:
-                self.error_cb(f"模型调用失败: {e}")
-                return
+            # ── 如果有预填充阶段解析出的待执行 Action，直接执行它 ────────
+            if self._pending_action is not None:
+                action = self._pending_action
+                self._pending_action = None  # 清除，只执行一次
+                thought_part = "继续执行规划的后续工具调用"
+                self.obs_cb(step_id, True, thought_part)
+            else:
+                # ── LLM call ─────────────────────────────────────────────
+                try:
+                    response = self.model_manager.chat(
+                        model_name=self.model_name,
+                        messages=messages,
+                        system_prompt=self.system_prompt,
+                        session_id=agent_llm_session,
+                    )
+                except Exception as e:
+                    self.error_cb(f"模型调用失败: {e}")
+                    return
 
-            if self.stop_flag():
-                return
+                if self.stop_flag():
+                    return
 
-            logging.info(f"[ReAct] iter={iteration} response=\n{response}")
+                logging.info(f"[ReAct] iter={iteration} response=\n{response}")
 
-            # ── Check for Final Answer ────────────────────────────────────
-            final_answer = _extract_final_answer(response)
-            if final_answer:
-                # Extract thought text (everything before Final Answer:)
-                thought_text = re.split(r'Final Answer\s*:', response)[0].strip()
-                self.obs_cb(step_id, True, thought_text or "推理完成")
-                # ── 收集推理链：Final Answer 分支 ──
-                if self.thought_chain_collector:
-                    self.thought_chain_collector({
-                        "iteration": iteration,
-                        "thought": thought_text or response.strip(),
-                        "action": None,
-                        "observation": thought_text or "推理完成",
-                        "success": True,
-                    })
-                self.final_cb(final_answer)
-                return
+                # ── Check for Final Answer ────────────────────────────────
+                final_answer = _extract_final_answer(response)
+                if final_answer:
+                    thought_text = re.split(r'Final Answer\s*:', response)[0].strip()
+                    self.obs_cb(step_id, True, thought_text or "推理完成")
+                    if self.thought_chain_collector:
+                        self.thought_chain_collector({
+                            "iteration": iteration,
+                            "thought": thought_text or response.strip(),
+                            "action": None,
+                            "observation": thought_text or "推理完成",
+                            "success": True,
+                        })
+                    self.final_cb(final_answer)
+                    return
 
-            # ── Check for Action ──────────────────────────────────────────
-            action = _extract_action(response)
-            thought_part = re.split(r'Action\s*:', response)[0].strip()
-            self.obs_cb(step_id, True, thought_part or response.strip())
+                # ── Check for Action ──────────────────────────────────────
+                action = _extract_action(response)
+                thought_part = re.split(r'Action\s*:', response)[0].strip()
+                self.obs_cb(step_id, True, thought_part or response.strip())
 
-            if action is None:
-                # No action and no final answer — treat whole response as final answer
-                # ── 收集推理链：无 Action 分支 ──
-                if self.thought_chain_collector:
-                    self.thought_chain_collector({
-                        "iteration": iteration,
-                        "thought": thought_part or response.strip(),
-                        "action": None,
-                        "observation": response.strip(),
-                        "success": True,
-                    })
-                self.final_cb(response.strip())
-                return
+                if action is None:
+                    # 无 Action 且无 Final Answer → 把整个回复当作最终答案
+                    if self.thought_chain_collector:
+                        self.thought_chain_collector({
+                            "iteration": iteration,
+                            "thought": thought_part or response.strip(),
+                            "action": None,
+                            "observation": response.strip(),
+                            "success": True,
+                        })
+                    self.final_cb(response.strip())
+                    return
 
+            # ── 执行工具 ────────────────────────────────────────────────
             tool_name = action.get('tool', '')
             tool_args = action.get('args', {})
 
             print(f"tool name: {tool_name}")
             print(f"tool args: {tool_args}")
 
-            # ── Execute tool ──────────────────────────────────────────────
             act_step_id = f"react_action_{iteration}"
             self.step_cb(act_step_id, f"调用工具: {tool_name}")
 
             if tool_name not in self.function_map:
                 obs_text = f"错误：工具 '{tool_name}' 不存在"
                 self.obs_cb(act_step_id, False, obs_text)
-                # ── 收集推理链：工具不存在 ──
                 if self.thought_chain_collector:
                     self.thought_chain_collector({
                         "iteration": iteration,
-                        "thought": thought_part or response.strip(),
+                        "thought": thought_part,
                         "action": action,
                         "observation": obs_text,
                         "success": False,
@@ -213,11 +340,10 @@ class ReActAgent:
             except Exception as e:
                 obs_text = f"工具执行异常: {e}"
                 self.obs_cb(act_step_id, False, obs_text)
-                # ── 收集推理链：工具执行异常 ──
                 if self.thought_chain_collector:
                     self.thought_chain_collector({
                         "iteration": iteration,
-                        "thought": thought_part or response.strip(),
+                        "thought": thought_part,
                         "action": action,
                         "observation": obs_text,
                         "success": False,
@@ -230,11 +356,10 @@ class ReActAgent:
             self.obs_cb(act_step_id, success, obs_message)
 
             if not success:
-                # ── 收集推理链：工具执行失败 ──
                 if self.thought_chain_collector:
                     self.thought_chain_collector({
                         "iteration": iteration,
-                        "thought": thought_part or response.strip(),
+                        "thought": thought_part,
                         "action": action,
                         "observation": obs_message,
                         "success": False,
@@ -242,28 +367,25 @@ class ReActAgent:
                 self.error_cb(f"工具 '{tool_name}' 执行失败: {obs_message}")
                 return
 
-            # ── 收集推理链：工具执行成功 ──
             if self.thought_chain_collector:
                 self.thought_chain_collector({
                     "iteration": iteration,
-                    "thought": thought_part or response.strip(),
+                    "thought": thought_part,
                     "action": action,
                     "observation": obs_message,
                     "success": True,
                 })
 
-            # ── 收集工具调用结果（用于持久化记忆） ──
             self.tool_results.append({
                 "tool": tool_name,
                 "args": tool_args,
                 "result_summary": obs_message,
             })
 
-            # ── Append to conversation for next iteration ─────────────────
-            # Simulate multi-turn: append assistant response + observation as next user message
+            # ── 追加到对话，供下一轮使用 ────────────────────────────────
             obs_json = json.dumps(result, ensure_ascii=False)
-            messages.append(response)           # assistant turn
-            messages.append(f"Observation: {obs_json}")  # observation as next user turn
+            messages.append(f"Thought: {thought_part}\nAction: {json.dumps(action, ensure_ascii=False)}")
+            messages.append(f"Observation: {obs_json}")
 
         # Exceeded max iterations
         self.error_cb(f"已达到最大推理轮次 ({MAX_ITERATIONS})，任务未完成。")
@@ -438,9 +560,10 @@ class ReActAgentController(QObject):
         self._tool_results = []
         self._final_answer = None
 
-        # ── Stage 1 & 2：LLM 路由，筛选工具 ────────────────────────────
+        # ── Stage 1: 专家路由（带对话历史）────────────────────────────────
         filtered_schemas = self._tool_schemas
         filtered_func_map = self._function_map
+        tool_plan: list[dict] = []  # 三阶段规划生成的工具调用计划
 
         try:
             # 延迟创建 ToolRouter（首次使用时才初始化）
@@ -453,26 +576,39 @@ class ReActAgentController(QObject):
                 "react_routing", "正在分析任务并选择工具..."
             )
 
-            # Stage 1: 专家路由
-            expert_names = self._tool_router.route_experts(user_input)
+            # Stage 1: 专家路由（传入历史上下文）
+            expert_names = self._tool_router.route_experts(
+                user_input, history=self._history,
+            )
             logging.info(f"[ReActController] Routed experts: {expert_names}")
 
-            # Stage 2: 工具精选
-            tool_names = self._tool_router.select_tools(user_input, expert_names)
+            # Stage 2: 工具精选（传入历史上下文）
+            tool_names = self._tool_router.select_tools(
+                user_input, expert_names, history=self._history,
+            )
             logging.info(f"[ReActController] Selected tools: {tool_names}")
 
-            # 即使 tool_names 为空（如 general_fallback_expert 单独被选中），
-            # 仍然走 ReAct 循环 —— system_prompt 中已有"无需工具直接回答"的兜底逻辑，
-            # LLM 会基于 self.history（对话上下文）生成回复。
-            # 如果强行早退并 emit normal_finished_signal，该信号在 main_window
-            # 中未被连接，UI 会永远卡住等待 finished_signal。
             filtered_schemas = self._tool_router.get_filtered_schemas(tool_names) if tool_names else []
             filtered_func_map = self._tool_router.get_filtered_func_map(tool_names) if tool_names else {}
 
+            # 路由完成，先发出完成信号让 UI 更新勾号
             self.workflow_step_finished.emit(
                 "react_routing", True,
                 f"已选择 {len(tool_names)} 个工具"
             )
+
+            # Stage 3: 参数填充 — 获取被选工具的完整 schema，让 LLM 推断参数
+            if tool_names:
+                self.workflow_step_started.emit(
+                    "react_param_fill", "正在推断工具参数..."
+                )
+                tool_plan = self._tool_router.fill_params(
+                    user_input, tool_names, history=self._history,
+                )
+                self.workflow_step_finished.emit(
+                    "react_param_fill", True,
+                    f"已生成 {len(tool_plan)} 个工具调用计划"
+                )
 
         except Exception as e:
             logging.error(
@@ -519,6 +655,7 @@ class ReActAgentController(QObject):
             session_id=self.session_id,
             history=self._history,
             rag_docs=rag_docs,
+            pre_filled_actions=tool_plan,
         )
 
         self._worker = _ReActWorker(agent, user_input)

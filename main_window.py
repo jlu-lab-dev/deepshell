@@ -447,16 +447,17 @@ class MainWin(QWidget):
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
 
-    def show_waiting_message(self, show):  # 总是和BubbleMessage成对出现，send为True则显示，否则隐藏，待优化
+    def show_waiting_message(self, show):  # send为True则显示气泡+禁用按钮，False则隐藏气泡（按钮由调用方管理）
         if show:
             if sip.isdeleted(self.waitingMessage):
                 self.waitingMessage = BubbleMessage('', '', MessageType.WAITING, 12, user_send=False)
             self.chat_box.add_message_item(self.waitingMessage)
             self.waitingMessage.show()
+            self.input_field.set_send_button_status(False)
         else:
             self.chat_box.remove_message_item(self.waitingMessage)
             self.waitingMessage.hide()
-        self.input_field.set_send_button_status(False)
+            # 不操作按钮状态，由调用方决定何时启用
 
     # Send Start
     def update_ai_message(self, result):
@@ -616,6 +617,10 @@ class MainWin(QWidget):
 
         # 清空推理链收集器
         self._react_thought_chain = []
+
+        # 隐藏等待气泡 + 将最终答案追加到 UI
+        self.show_waiting_message(False)
+        self.add_bubble_message(final_message, user_send=False)
 
     def handle_agent_error(self, error_message):
         """Receives Agent error signal."""
