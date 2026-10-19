@@ -13,7 +13,8 @@ class ModelSelectButton(QPushButton):
         # 格式：界面名称:实际模型调用的模型名称(model.yaml的key)
         self.model_name_dict = {
             "DeepSeek-V3": "DeepSeek-V3",
-            "通义千问": "Qwen-Max",
+            "通义千问": "Qwen-PLUS",
+            "Qwen-FLASH": "Qwen-FLASH",
             "讯飞星火": "XunFei-generalv3.5",
             "DeepSeek-R1(离线)": "DeepSeek-R1-1.5B"
         }
@@ -21,6 +22,7 @@ class ModelSelectButton(QPushButton):
         self.model_icon_path = {
             "DeepSeek-V3": "ui/icon/icon_模型切换_deepseek.png",
             "通义千问": "ui/icon/icon_模型切换_阿里通义.png",
+            "Qwen-FLASH": "ui/icon/icon_模型切换_阿里通义.png",
             "讯飞星火": "ui/icon/icon_模型切换_讯飞星火.png",
             "DeepSeek-R1(离线)": "ui/icon/icon_模型切换_deepseek.png",
         }

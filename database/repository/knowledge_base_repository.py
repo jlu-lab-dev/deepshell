@@ -125,6 +125,34 @@ class KnowledgeBaseRepository:
                 logging.error(f"Error adding document: {str(e)}")
                 return None
 
+    def update_document_index(
+        self, doc_id: str, status: str, chunk_count: int = 0
+    ) -> bool:
+        """在同一事务中更新文档索引状态、分块数及知识库统计。"""
+        if status not in {"indexing", "active", "failed"}:
+            raise ValueError(f"非法索引状态: {status}")
+
+        try:
+            with self.db_manager.session_scope() as session:
+                doc = session.query(Document).filter(Document.id == doc_id).first()
+                if doc is None:
+                    return False
+
+                previous_count = doc.chunk_count or 0
+                doc.status = status
+                doc.chunk_count = chunk_count
+                kb = session.query(KnowledgeBase).filter(
+                    KnowledgeBase.id == doc.kb_id
+                ).first()
+                if kb is not None:
+                    kb.chunk_count = max(
+                        0, (kb.chunk_count or 0) + chunk_count - previous_count
+                    )
+            return True
+        except SQLAlchemyError:
+            logging.exception("更新文档索引状态失败: %s", doc_id)
+            return False
+
     def get_document_by_id(self, doc_id: str) -> Optional[Document]:
         """Get a document by its ID"""
         with self.db_manager.session_scope() as session:

@@ -307,23 +307,41 @@ class RAGManager:
         """处理并添加文档到向量数据库。"""
         try:
             if not self.document_processor.is_supported_file_type(
-                    file_path, self.config['supported_file_types']):
-                raise ValueError(f"Unsupported file type: {Path(file_path).suffix.lower()}")
+                file_path, self.config["supported_file_types"]
+            ):
+                raise ValueError(f"不支持的文件类型: {Path(file_path).suffix}")
 
+            logging.info("[RAG] 开始解析文档: %s", file_path)
             documents = self.document_processor.load_document(file_path)
-            chunked_documents = self.document_processor.chunk_documents(documents)
+            chunks = self.document_processor.chunk_documents(documents)
+            if not chunks:
+                raise ValueError("文档解析后没有有效文本分块")
 
-            for doc in chunked_documents:
-                doc.metadata["knowledge_base"] = knowledge_base
-                doc.metadata["doc_id"] = doc_id
+            for chunk in chunks:
+                chunk.metadata["knowledge_base"] = str(knowledge_base)
+                chunk.metadata["doc_id"] = str(doc_id)
 
-            self.vector_db.add_documents(chunked_documents)
+            logging.info("[RAG] 分块完成: %d chunks", len(chunks))
+            # 保留已经验证过的原版批量写入方式。
+            self.vector_db.add_documents(chunks)
+            records = self.vector_db._collection.get(
+                where={"doc_id": {"$eq": str(doc_id)}},
+                include=[]
+            )
+            actual_count = len(records["ids"])
+            if actual_count != len(chunks):
+                raise RuntimeError(
+                    f"Chroma 写入数量错误：预期 {len(chunks)}，实际 {actual_count}"
+                )
 
-            # 重建 BM25 索引
+            logging.info(
+                "[RAG] 向量写入成功: doc_id=%s, chunks=%d",
+                doc_id, actual_count
+            )
             self._rebuild_bm25_index()
             return True
-        except Exception as e:
-            print(f"Error adding document: {str(e)}")
+        except Exception:
+            logging.exception("[RAG] 文档索引失败: %s", file_path)
             return False
 
     def delete_document(self, doc_id: str) -> bool:
