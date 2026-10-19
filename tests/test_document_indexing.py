@@ -1,5 +1,6 @@
 import ctypes
 import sys
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from threading import Event
@@ -37,12 +38,16 @@ def test_rag_verifies_actual_writes(actual_count, expected):
     rag._rebuild_bm25_index = Mock()
 
     assert rag.add_document("manual.pdf", doc_id=123, knowledge_base=456) is expected
-    rag.vector_db.add_documents.assert_called_once_with(chunks)
+    ids = [str(uuid.uuid5(uuid.NAMESPACE_URL, f"456:123:{i}")) for i in range(2)]
+    rag.vector_db.add_documents.assert_called_once_with(chunks, ids=ids)
     rag.vector_db._collection.get.assert_called_once_with(
         where={"doc_id": {"$eq": "123"}}, include=[]
     )
-    assert all(chunk.metadata == {"doc_id": "123", "knowledge_base": "456"}
-               for chunk in chunks)
+    for i, chunk in enumerate(chunks):
+        assert chunk.metadata == {
+            "doc_id": "123", "knowledge_base": "456",
+            "chunk_id": ids[i], "chunk_index": i
+        }
     assert rag._rebuild_bm25_index.call_count == int(expected)
 
 

@@ -1,5 +1,6 @@
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -145,16 +146,30 @@ class RAGManager:
             logging.error(f"[RAG] BM25 index rebuild failed: {e}")
             self._bm25_index = None
 
-    def _bm25_search(self, query: str, top_k: int = 20) -> List[Dict[str, Any]]:
-        """BM25 关键词检索。返回 [{"chroma_id", "content", "metadata", "bm25_score"}, ...]"""
-        if not self._bm25_index:
+    def _bm25_search(self, query: str, top_k: int = 20,
+                     knowledge_bases: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """全局语料评分，先过滤允许的知识库，再选 Top-K。"""
+        allowed = {str(kb) for kb in (
+            knowledge_bases if knowledge_bases is not None else ["default"]
+        )}
+        if not allowed or top_k <= 0:
+            return []
+        if self._bm25_index is None:
             self._rebuild_bm25_index()
-        if not self._bm25_index:
+        if self._bm25_index is None:
             return []
 
-        tokenized_query = list(jieba.cut(query))
-        scores = self._bm25_index.get_scores(tokenized_query)
-        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+        scores = self._bm25_index.get_scores(list(jieba.cut(query)))
+        candidates = [
+            i for i, cid in enumerate(self._bm25_chroma_ids)
+            if str((self._bm25_content_map[cid]["metadata"] or {}).get(
+                "knowledge_base", ""
+            )) in allowed
+        ]
+        top_indices = sorted(
+            candidates,
+            key=lambda i: (-float(scores[i]), str(self._bm25_chroma_ids[i]))
+        )[:top_k]
 
         results = []
         for idx in top_indices:
@@ -169,7 +184,7 @@ class RAGManager:
                 "bm25_score": float(scores[idx]),
             })
         for i, r in enumerate(results):
-            source = r["metadata"].get("source", "Unknown")
+            source = (r["metadata"] or {}).get("source", "Unknown")
             logging.info(f"[RAG] BM25 #{i+1} score={r['bm25_score']:.4f} | source={source} | {r['content'][:30]}...")
         return results
 
@@ -177,7 +192,9 @@ class RAGManager:
 
     def hybrid_search(self, query: str, k: int = 5,
                       knowledge_bases: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """混合检索：BM25 + 语义相似度，加权融合。"""
+        """按真实 Chroma ID 融合已选知识库的 BM25 和语义结果。"""
+        if k <= 0:
+            return []
         cfg = self.config.get('hybrid_search', {})
         kw_weight = cfg.get('keyword_weight', 0.3)
         sem_weight = cfg.get('semantic_weight', 0.7)
@@ -185,56 +202,42 @@ class RAGManager:
         sem_top = cfg.get('semantic_top_k', 20)
 
         # ── Step 1: BM25 ──────────────────────────────────────────────────
-        bm25_results = self._bm25_search(query, top_k=kw_top)
-        bm25_scores = {r["content"]: r["bm25_score"] for r in bm25_results}
-        bm25_meta = {r["content"]: r["metadata"] for r in bm25_results}
+        bm25_results = self._bm25_search(
+            query, top_k=kw_top, knowledge_bases=knowledge_bases
+        )
+        bm25_by_id = {r["chroma_id"]: r for r in bm25_results}
 
         # ── Step 2: Semantic ──────────────────────────────────────────────
-        if knowledge_bases is None:
-            knowledge_bases = ["default"]
-        where_filter = {"knowledge_base": {"$in": knowledge_bases}}
-        # 避免请求数超过索引中实际 chunk 数量（否则 ChromaDB 会 WARN 并自动降级）
-        total_chunks = self.vector_db._collection.count()
-        actual_k = min(sem_top, max(1, total_chunks))
-        sem_raw = self.vector_db.similarity_search_with_score(
-            query=query, k=actual_k, filter=where_filter
+        sem_results = self._semantic_search(
+            query, k=sem_top, knowledge_bases=knowledge_bases
         )
-        sem_scores = {}
-        for doc, sim_score in sem_raw:
-            sem_scores[doc.page_content] = float(sim_score)
-        for i, (doc, sim_score) in enumerate(sem_raw):
-            source = doc.metadata.get("source", "Unknown")
-            logging.info(f"[RAG] Semantic #{i+1} score={sim_score:.4f} | source={source} | {doc.page_content[:30]}...")
+        sem_by_id = {r["chroma_id"]: r for r in sem_results}
 
         # ── Step 3: 加权融合（直接用原始分数，不归一化）──────────────
         # BM25 分数：越高越好，但小语料下可能为负数
-        # 语义分数：ChromaDB cosine similarity，越高越好（0~1）
+        # 本轮保持原有原始数值加权策略；Chroma 返回的是距离。
         # 融合 = kw_weight * bm25_score + sem_weight * semantic_score
         # 阈值过滤：融合分 < score_threshold 的丢弃
         score_threshold = cfg.get('score_threshold', 0.3)
-        all_contents = set(bm25_scores) | set(sem_scores)
         fused = []
-        for content in all_contents:
-            bm25_s = bm25_scores.get(content, 0.0)
-            sem_s = sem_scores.get(content, 0.0)
+        for cid in bm25_by_id.keys() | sem_by_id.keys():
+            bm25_result = bm25_by_id.get(cid, {})
+            sem_result = sem_by_id.get(cid, {})
+            bm25_s = bm25_result.get("bm25_score", 0.0)
+            sem_s = sem_result.get("score", 0.0)
             fused_score = kw_weight * bm25_s + sem_weight * sem_s
-
-            # metadata 优先取语义结果中的
-            meta = bm25_meta.get(content, {})
-            for doc, _ in sem_raw:
-                if doc.page_content == content:
-                    meta = doc.metadata
-                    break
-
+            record = sem_result or bm25_result
             fused.append({
-                "content": content,
-                "metadata": meta,
+                "chroma_id": cid,
+                "content": record["content"],
+                "metadata": record["metadata"],
                 "score": fused_score,
-                "bm25_score": bm25_scores.get(content, 0),
-                "semantic_score": sem_scores.get(content, 0),
+                "bm25_score": bm25_s,
+                "semantic_score": sem_s,
+                "distance": sem_result.get("distance"),
             })
 
-        fused.sort(key=lambda x: x["score"], reverse=True)
+        fused.sort(key=lambda x: (-x["score"], str(x["chroma_id"])))
 
         # 阈值过滤：融合分数低于阈值的丢弃
         score_threshold = cfg.get('score_threshold', 0.3)
@@ -242,7 +245,7 @@ class RAGManager:
 
         logging.info(f"[RAG] Hybrid fusion: {len(fused)} candidates → {len(filtered)} after threshold={score_threshold}")
         for i, r in enumerate(filtered[:k]):
-            source = r["metadata"].get("source", "Unknown")
+            source = (r["metadata"] or {}).get("source", "Unknown")
             logging.info(
                 f"[RAG] Fusion #{i+1} fused={r['score']:.4f} "
                 f"(bm25={r['bm25_score']:.4f}, sem={r['semantic_score']:.4f}) "
@@ -266,27 +269,49 @@ class RAGManager:
             raw = self.base_search(query, k=k, knowledge_bases=knowledge_bases)
             return [{**r, "bm25_score": 0} for r in raw]
 
-    def base_search(self, query: str, k: int = 3,
-                    knowledge_bases: Optional[List[str]] = "default") -> List[Dict[str, Any]]:
-        """纯语义相似度检索（ChromaDB）。"""
+    def _semantic_search(self, query: str, k: int = 3,
+                         knowledge_bases: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """从 Chroma 原始结果取真实记录 ID，兼容没有 chunk_id 的旧索引。"""
+        allowed = {str(kb) for kb in (
+            knowledge_bases if knowledge_bases is not None else ["default"]
+        )}
+        if not allowed or k <= 0:
+            return []
         try:
-            where_filter = {"knowledge_base": {"$in": knowledge_bases}}
-            results = self.vector_db.similarity_search_with_score(
-                query=query,
-                k=k,
-                filter=where_filter
+            where_filter = {"knowledge_base": {"$in": sorted(allowed)}}
+            collection = self.vector_db._collection
+            selected_ids = collection.get(where=where_filter, include=[])["ids"]
+            if not selected_ids:
+                return []
+            results = collection.query(
+                query_embeddings=[self.embedding.embed_query(query)],
+                n_results=min(k, len(selected_ids)),
+                where=where_filter,
+                include=["documents", "metadatas", "distances"]
             )
             formatted = []
-            for doc, score in results:
+            for cid, text, meta, distance in zip(
+                results["ids"][0], results["documents"][0],
+                results["metadatas"][0], results["distances"][0]
+            ):
+                if str((meta or {}).get("knowledge_base", "")) not in allowed:
+                    continue
                 formatted.append({
-                    'content': doc.page_content,
-                    'metadata': doc.metadata,
-                    'score': score
+                    "chroma_id": cid,
+                    "content": text,
+                    "metadata": meta or {},
+                    "score": float(distance),
+                    "distance": float(distance)
                 })
             return formatted
-        except Exception as e:
-            print(f"Error searching: {str(e)}")
+        except Exception:
+            logging.exception("[RAG] 语义检索失败")
             return []
+
+    def base_search(self, query: str, k: int = 3,
+                    knowledge_bases: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """纯语义检索，保留 Chroma 真实 ID、元数据和原始距离。"""
+        return self._semantic_search(query, k=k, knowledge_bases=knowledge_bases)
 
     def get_relevant_context(self, query: str, k: int = 3,
                              knowledge_bases: Optional[List[str]] = None) -> str:
@@ -317,13 +342,20 @@ class RAGManager:
             if not chunks:
                 raise ValueError("文档解析后没有有效文本分块")
 
-            for chunk in chunks:
+            ids = []
+            for index, chunk in enumerate(chunks):
+                chunk_id = str(uuid.uuid5(
+                    uuid.NAMESPACE_URL, f"{knowledge_base}:{doc_id}:{index}"
+                ))
                 chunk.metadata["knowledge_base"] = str(knowledge_base)
                 chunk.metadata["doc_id"] = str(doc_id)
+                chunk.metadata["chunk_id"] = chunk_id
+                chunk.metadata["chunk_index"] = index
+                ids.append(chunk_id)
 
             logging.info("[RAG] 分块完成: %d chunks", len(chunks))
             # 保留已经验证过的原版批量写入方式。
-            self.vector_db.add_documents(chunks)
+            self.vector_db.add_documents(chunks, ids=ids)
             records = self.vector_db._collection.get(
                 where={"doc_id": {"$eq": str(doc_id)}},
                 include=[]

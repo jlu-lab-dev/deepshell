@@ -5,6 +5,7 @@ from chat.assistant import Assistant
 class ChatTask(QThread):
     complete_signal = pyqtSignal(str)  # 用于通知完成
     update_signal = pyqtSignal(str)  # 用于流式更新内容
+    sources_signal = pyqtSignal(list)  # 将真实检索来源发送给 GUI 主线程
 
     def __init__(self, assistant_type='general'):
         super().__init__()
@@ -21,14 +22,20 @@ class ChatTask(QThread):
             self.stop_flag = False
 
             complete_response = ""
+            self.sources_signal.emit([])
 
             # 流式处理响应
-            for chunk in self.assistant.chat_stream([self.topic]):
-                if self.stop_flag:
-                    break
-                complete_response += chunk
-                # 发送更新信号，用于更新UI
-                self.update_signal.emit(complete_response)
+            stream = self.assistant.chat_stream([self.topic])
+            self.sources_signal.emit(list(self.assistant.last_rag_docs))
+            try:
+                for chunk in stream:
+                    if self.stop_flag:
+                        break
+                    complete_response += chunk
+                    # 发送更新信号，用于更新UI
+                    self.update_signal.emit(complete_response)
+            finally:
+                stream.close()
 
             if not self.stop_flag:
                 self.complete_signal.emit(complete_response)
