@@ -7,6 +7,8 @@ from typing import Optional, Tuple
 from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
 from rag.rag_manager import RAGManager
+from chat.rag_citations import make_citation_docs, make_citation_prompt
+from database.repository.knowledge_base_repository import KnowledgeBaseRepository
 
 class Assistant:
     def __init__(self, assistant_type: str, session_id: Optional[str] = None):
@@ -14,6 +16,7 @@ class Assistant:
         self.model_manager = ModelManager()
         self.rag_manager = RAGManager()
         self.web_search_manager = None
+        self.last_rag_docs = []
         self._load_assistant_config(assistant_type)
 
     def _load_assistant_config(self, assistant_type: str) -> None:
@@ -57,45 +60,36 @@ class Assistant:
         )
 
     def chat_stream(self, messages: list[str]):
-        import logging
-        import json
-
-        enhanced_message = messages[-1]
-        context_parts = []
-        rag_docs = []   # RAG 结构化结果，供后续持久化
-
-        logging.info(f"[ASSISTANT_STREAM] 开始处理流式查询: '{messages[-1]}'")
-
-        # 使用 RAG 模式，将知识库搜索结果注入
-        if len(self.kb_list):
-            logging.info(f"[ASSISTANT_STREAM] 使用知识库: {self.kb_list}")
-            # 调用 search 获取结构化结果
-            rag_results = self.rag_manager.search(messages[-1], k=3, knowledge_bases=self.kb_list)
-            if rag_results:
-                for i, result in enumerate(rag_results):
-                    source = result.get('metadata', {}).get('source', 'Unknown')
-                    content_text = result.get('content', '')
-                    rag_docs.append({"source": source, "content": content_text})
-                    context_parts.append(f"[Document {i+1}] (Source: {source})\n{content_text}")
-                knowledge = "\n\n".join(context_parts)
-                context_parts = [f"知识库信息：\n{knowledge}"]
+        """检索真实证据，构建带引用编号的上下文，并独立缓存历史来源。"""
+        original_input = messages[-1]
+        messages = list(messages)
+        self.last_rag_docs = []
+        if self.kb_list:
+            results = self.rag_manager.search(
+                original_input, k=3, knowledge_bases=self.kb_list
+            )
+            kb_names = {
+                str(kb.id): kb.name
+                for kb in KnowledgeBaseRepository().list_knowledge_bases()
+            }
+            self.last_rag_docs = make_citation_docs(results, kb_names)
+            if self.last_rag_docs:
+                evidence = make_citation_prompt(self.last_rag_docs)
+                messages[-1] = (
+                    f"{original_input}\n\n请仅依据以下检索证据回答。"
+                    "使用 [1]、[2] 等编号引用对应证据。只能引用实际提供的编号，"
+                    "证据不足时请明确说明，不能编造文档或页码。\n\n"
+                    f"{evidence}"
+                )
             else:
-                context_parts = []
-                logging.info(f"[ASSISTANT_STREAM] 知识库未返回有效结果")
+                messages[-1] = (
+                    f"{original_input}\n\n当前选中知识库没有返回相关证据。"
+                    "请说明未检索到依据，不要虚构文档来源。"
+                )
 
-        # 如果有上下文信息，则添加到消息中
-        if context_parts:
-            context_text = "\n\n".join(context_parts)
-            enhanced_message = f"{messages[-1]}\n\n参考以下信息回答用户问题：\n{context_text}"
-            messages[-1] = enhanced_message
-            logging.info(f"[ASSISTANT_STREAM] 上下文增强完成，总长度: {len(context_text)} 字符")
-        else:
-            logging.info(f"[ASSISTANT_STREAM] 无额外上下文，使用原始查询")
-
-        # 附加 RAG 结构化结果标记，供 model_manager 在持久化时提取
-        if rag_docs:
-            messages[-1] = messages[-1] + f"\n__RAG_DOCS_JSON__:{json.dumps(rag_docs, ensure_ascii=False)}\n"
-
+        self.model_manager.set_pending_rag_turn(
+            self.session_id, original_input, self.last_rag_docs
+        )
         return self.model_manager.chat_stream(
             model_name=self.model,
             messages=messages,

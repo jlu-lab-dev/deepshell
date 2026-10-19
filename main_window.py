@@ -57,6 +57,7 @@ from chat.message_helpers import (
     make_text_message, make_agent_workflow_message,
     make_agent_memory_message, get_message_parts,
     get_summary_text, is_compressed,
+    iter_history_messages_with_sources,
 )
 
 
@@ -255,6 +256,7 @@ class MainWin(QWidget):
         self.current_input = None    # string
         self.current_bubble_message = None
         self.current_func = "智能问答"
+        self._current_rag_sources = []
 
         # knowledge base setting
         self.selected_kb_id_list = []
@@ -272,6 +274,7 @@ class MainWin(QWidget):
         self.sendTask = ChatTask()
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
+        self.sendTask.sources_signal.connect(self.handle_rag_sources)
 
         self.localAppTask = OpenLocalAppTask()
 
@@ -399,6 +402,7 @@ class MainWin(QWidget):
             print(f"未定义的功能：{function_name}")
 
     def switch_init(self, function_name):
+        self._current_rag_sources = []
         if self.sendTask.isRunning():
             self.sendTask.stop()
             self.show_waiting_message(False)
@@ -446,6 +450,12 @@ class MainWin(QWidget):
             pass  # 尚未连接，忽略
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
+        if isinstance(self.sendTask, ChatTask):
+            try:
+                self.sendTask.sources_signal.disconnect(self.handle_rag_sources)
+            except (RuntimeError, TypeError):
+                pass
+            self.sendTask.sources_signal.connect(self.handle_rag_sources)
 
     def show_waiting_message(self, show):  # 总是和BubbleMessage成对出现，send为True则显示，否则隐藏，待优化
         if show:
@@ -457,6 +467,14 @@ class MainWin(QWidget):
             self.chat_box.remove_message_item(self.waitingMessage)
             self.waitingMessage.hide()
         self.input_field.set_send_button_status(False)
+
+    def handle_rag_sources(self, sources: list):
+        """由 GUI 主线程缓存真实来源，与模型生成文本分开传递。"""
+        if self.sender() is not None and self.sender() is not self.sendTask:
+            return
+        self._current_rag_sources = list(sources)
+        if self.current_func == "智能问答" and self.current_bubble_message is not None:
+            self.current_bubble_message.set_sources(self._current_rag_sources)
 
     # Send Start
     def update_ai_message(self, result):
@@ -479,6 +497,8 @@ class MainWin(QWidget):
                 self.current_bubble_message = BubbleMessage(result, '', msg_type=MessageType.TEXT, font_size=12, user_send=False)
             self.speech_page.updateStatus('应答中')
             self.current_bubble_message.speech_signal.connect(self.handle_speech)
+            if self.current_func == "智能问答":
+                self.current_bubble_message.set_sources(self._current_rag_sources)
             self.chat_box.add_message_item(self.current_bubble_message)
 
         else:
@@ -546,6 +566,10 @@ class MainWin(QWidget):
                 self.chat_box.scrollArea.reset_auto_scroll()
                 self.chat_box.add_message_item(bubble_message)
                 bubble_message.button.clicked.connect(lambda: self.pgen.markdown_to_json(result))
+
+        if self.current_func == "智能问答" and bubble_message is not None:
+            bubble_message.set_sources(self._current_rag_sources)
+        self._current_rag_sources = []
 
         # 重置当前BubbleMessage引用
         self.current_bubble_message = None
@@ -775,6 +799,9 @@ class MainWin(QWidget):
         self.sendTask = ChatTask()  # 新实例化一个Assistant
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
+        self.sendTask.sources_signal.connect(self.handle_rag_sources)
+        self.sendTask.assistant.set_selected_kb(self.selected_kb_id_list)
+        self._current_rag_sources = []
 
         # 懒加载 ConversationRepository 并注入 ModelManager
         if not hasattr(self, 'conversation_repo'):
@@ -907,6 +934,9 @@ class MainWin(QWidget):
         self.sendTask.assistant.model_manager.set_conversation_repo(self.conversation_repo)
         self.sendTask.complete_signal.connect(self.ai_callback)
         self.sendTask.update_signal.connect(self.update_ai_message)
+        self.sendTask.sources_signal.connect(self.handle_rag_sources)
+        self.sendTask.assistant.set_selected_kb(self.selected_kb_id_list)
+        self._current_rag_sources = []
 
         # 7. 从 DB 加载历史消息到内存（重建 LLM 上下文）
         #    规则：跳过 compressed 消息；全部 summary 拼接到第一条 HumanMessage 前面；
@@ -954,8 +984,7 @@ class MainWin(QWidget):
         self.current_workflow_container = None
         self._react_thought_chain.clear()
         self.chat_box.clearLayout()
-        for msg in db_messages:
-            data = parse_message_content(msg.content)
+        for msg, data, sources in iter_history_messages_with_sources(db_messages):
             msg_type = data.get("type", "text")
 
             # agent_memory 和 summary 类型不渲染
@@ -973,7 +1002,7 @@ class MainWin(QWidget):
             elif msg_type == "text":
                 # 普通文本 → BubbleMessage
                 parts = get_message_parts(msg.content)
-                display_text = parts.get("user_input")
+                display_text = parts.get("user_input") or parts.get("content", "")
                 attachment_content = parts.get("attachment_content", [])
 
                 # 渲染附件缩略图（从 attachment_content）
@@ -988,6 +1017,8 @@ class MainWin(QWidget):
                     display_text, '', MessageType.TEXT,
                     font_size=12, user_send=(msg.role == "user")
                 )
+                if msg.role == "assistant":
+                    bubble.set_sources(sources)
                 self.chat_box.add_message_item(bubble)
 
             else:

@@ -3,6 +3,7 @@
 
 import json
 from typing import Optional
+from chat.rag_citations import make_citation_prompt
 
 
 def is_json_message(content: str) -> bool:
@@ -83,6 +84,20 @@ def get_message_parts(content: str) -> dict:
     }
 
 
+def iter_history_messages_with_sources(messages):
+    """将用户保存的来源配给紧随其后的助手轮次，避免跨轮次残留。"""
+    pending_sources = []
+    for message in messages:
+        data = parse_message_content(message.content)
+        sources = []
+        if message.role == "user":
+            pending_sources = list(data.get("relevant_docs") or [])
+        elif message.role == "assistant":
+            sources = pending_sources
+            pending_sources = []
+        yield message, data, sources
+
+
 def build_llm_context(user_input: str, attachment_content: list = None,
                       relevant_docs: list = None) -> str:
     """
@@ -98,13 +113,7 @@ def build_llm_context(user_input: str, attachment_content: list = None,
             parts.append(f"用户上传附件内容 {i+1}：{name}\n{text}")
 
     if relevant_docs:
-        doc_parts = []
-        for doc in relevant_docs:
-            source = doc.get("source", "未知来源")
-            text = doc.get("content", "")
-            doc_parts.append(f"[Document] (Source: {source})\n{text}")
-        if doc_parts:
-            parts.append("参考以下信息回答用户问题：\n" + "\n\n".join(doc_parts))
+        parts.append("参考以下编号证据回答用户问题：\n" + make_citation_prompt(relevant_docs))
 
     return "\n\n".join(parts)
 

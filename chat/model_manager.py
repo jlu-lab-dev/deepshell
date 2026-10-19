@@ -28,6 +28,7 @@ class ModelManager:
         self.memory: Dict[str, BaseChatMessageHistory] = {}
         self.config_manager = ConfigManager()
         self.conversation_repo = None  # 懒加载，由 main_window 注入
+        self._pending_rag_turn = {}
         self.load_model_config()
 
         # ── 压缩控制 ──
@@ -120,6 +121,13 @@ class ModelManager:
             
         return result
     
+    def set_pending_rag_turn(self, session_id: str, original_input: str, docs: list):
+        """独立缓存本轮原始问题和真实来源，不向 Prompt 拼接内部 JSON 标记。"""
+        self._pending_rag_turn[session_id] = {
+            "original_input": original_input,
+            "relevant_docs": list(docs),
+        }
+
     def set_conversation_repo(self, repo):
         """由 main_window 注入 ConversationRepository"""
         self.conversation_repo = repo
@@ -182,31 +190,19 @@ class ModelManager:
         Yields:
             Chunks of the response as they are generated
         """
-        response_stream = self._get_chat_stream(model_name, messages, system_prompt, session_id)
+        try:
+            response_stream = self._get_chat_stream(model_name, messages, system_prompt, session_id)
+            for chunk in response_stream:
+                yield chunk.content
 
-        # Build the full response as we stream (for history)
-        full_response = ""
-
-        for chunk in response_stream:
-            chunk_text = chunk.content
-            full_response += chunk_text
-            yield chunk_text
-
-        # 注意：RunnableWithMessageHistory.stream() 会自动将 user 和 AI 写入历史，
-        # 但写入的 AI 类型是 AIMessageChunk（type="AIMessageChunk"）而非 AIMessage（type="ai"）。
-        # 不能再手动 add_ai_message，否则 AI 消息会双份，导致 LLM 上下文膨胀、输出重复。
-        # _persist_stream_messages 已做适配，能正确识别 AIMessageChunk 并持久化。
-        # if full_response:
-        #     history = self.get_session_history(session_id)
-        #     history.add_ai_message(full_response)  # ← 禁止！会导致 AI 消息双份
-
-        # 流结束后将本次对话消息追加写入数据库
-        if self.conversation_repo and session_id:
-            # 如果该 session 正在异步压缩中，先等压缩完成再 persist，防止竞态
-            self._wait_for_compress(session_id)
-            self._persist_stream_messages(session_id)
-            # 异步触发压缩检查（后台线程，不阻塞用户）
-            self._start_async_compress(session_id)
+            # RunnableWithMessageHistory 已保存 user 和 AIMessageChunk，不重复添加 AI 消息。
+            if self.conversation_repo and session_id:
+                self._wait_for_compress(session_id)
+                self._persist_stream_messages(session_id)
+                self._start_async_compress(session_id)
+        finally:
+            # 包含异常、中断和未启用持久化的情况，避免下一轮误用残留来源。
+            self._pending_rag_turn.pop(session_id, None)
 
     # ── 异步压缩控制 ──────────────────────────────────────────────────────
 
@@ -262,6 +258,10 @@ class ModelManager:
         msgs_to_save = [m for m in history.messages if m.type in ("human", "ai") or isinstance(m, AIMessageChunk)]
         if not msgs_to_save:
             return
+        pending = self._pending_rag_turn.get(conversation_id)
+        latest_human = next(
+            (msg for msg in reversed(msgs_to_save) if msg.type == "human"), None
+        )
         existing = self.conversation_repo.get_messages(conversation_id)
         # 只统计活跃消息（排除已压缩和 summary），否则压缩后计数永远大于内存
         existing_count = sum(
@@ -296,11 +296,15 @@ class ModelManager:
                             relevant_docs = None
                         user_input = user_input_clean
 
-                    # 提取 attachment_content（解析 "用户上传附件内容 N：" 段落）
+                    if msg is latest_human and pending is not None:
+                        user_input = pending["original_input"]
+                        relevant_docs = pending["relevant_docs"] or None
+
+                    # 仅从原始输入提取附件，避免将检索证据里的相同文字当成附件。
                     attachment_content = []
                     att_matches = re.findall(
                         r"用户上传附件内容 \d+：(.*?)(?=\n\n|$)",
-                        raw_content, re.DOTALL
+                        user_input, re.DOTALL
                     )
                     for att_text in att_matches:
                         attachment_content.append({"content": att_text.strip()})
@@ -317,6 +321,7 @@ class ModelManager:
 
                 self.conversation_repo.add_message(conversation_id, role, content)
         self.conversation_repo.update_timestamp(conversation_id)
+        self._pending_rag_turn.pop(conversation_id, None)
 
 
 if __name__ == "__main__":

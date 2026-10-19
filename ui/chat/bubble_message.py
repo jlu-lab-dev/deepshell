@@ -1,5 +1,6 @@
 # bubble_message.py
 
+import html
 import re
 import markdown
 
@@ -504,6 +505,22 @@ class BubbleMessage(QWidget):
             msg_row.addStretch()
         bubble_col.addLayout(msg_row)
 
+        self.rag_sources = []
+        self.source_toggle = QPushButton("📚 查看检索依据", self)
+        self.source_toggle.setCheckable(True)
+        self.source_toggle.hide()
+        self.source_detail = QLabel(self)
+        self.source_detail.setWordWrap(True)
+        self.source_detail.setTextFormat(Qt.RichText)
+        self.source_detail.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.source_detail.setMaximumWidth(450)
+        self.source_detail.hide()
+        self.source_toggle.toggled.connect(self.source_detail.setVisible)
+        if not self.user_send and self.msg_type == MessageType.TEXT:
+            bubble_col.addSpacing(5)
+            bubble_col.addWidget(self.source_toggle, alignment=Qt.AlignLeft)
+            bubble_col.addWidget(self.source_detail)
+
         # 2. 按钮行（仅 AI 且需要按钮）
         if not self.user_send and self.need_button and \
                 self.msg_type in (MessageType.TEXT, MessageType.TABLE):
@@ -542,6 +559,35 @@ class BubbleMessage(QWidget):
             top_row.addStretch()
 
         main_col.addLayout(top_row)  # 把原来的 top_row 塞进主列
+
+    def set_sources(self, docs):
+        """仅展示程序检索到的证据，所有文档文字均按纯文本转义。"""
+        self.rag_sources = list(docs or [])
+        if self.user_send or self.msg_type != MessageType.TEXT or not self.rag_sources:
+            self.source_toggle.setChecked(False)
+            self.source_toggle.hide()
+            self.source_detail.clear()
+            self.source_detail.hide()
+            return
+
+        sections = []
+        for number, doc in enumerate(self.rag_sources, 1):
+            source = doc.get("source") or ""
+            filename = doc.get("filename") or str(source).replace("\\", "/").rsplit("/", 1)[-1] or "未知文件"
+            kb = doc.get("knowledge_base_name") or doc.get("knowledge_base") or "未知知识库"
+            page = doc.get("page")
+            location = f"PDF 第 {page} 页" if page is not None else "页码未知"
+            chunk_id = doc.get("chroma_id") or doc.get("chunk_id")
+            identity = f"<br>分块 ID：{html.escape(str(chunk_id))}" if chunk_id else ""
+            content = html.escape(str(doc.get("content") or "")).replace("\n", "<br>")
+            sections.append(
+                f"<b>[{number}] {html.escape(str(filename))}</b><br>"
+                f"知识库：{html.escape(str(kb))}；{html.escape(location)}"
+                f"{identity}<br>{content}"
+            )
+        self.source_detail.setText("<br><br>".join(sections))
+        self.source_toggle.show()
+        self.source_detail.setVisible(self.source_toggle.isChecked())
 
     def generate_msg(self, message, msg_type, user_send):
         if msg_type == MessageType.TEXT:
