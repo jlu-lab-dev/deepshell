@@ -1,0 +1,29 @@
+﻿id,split,task_type,knowledge_bases,question,reference_answer,gold_source,gold_page
+FD-001,dev,answerable,KB_A_Desktop_V5,方德桌面操作系统 V5.0-G230 的版本号是什么？,V5.0-G230,zm_yhsc.pdf,5
+FD-002,dev,answerable,KB_A_Desktop_V5,在方德桌面 V5.0-G230 中如何通过鼠标调节桌面图标大小？,按住 Ctrl 键同时滚动鼠标滚轮，可以调节桌面图标大小。,zm_yhsc.pdf,9
+FD-003,dev,answerable,KB_A_Desktop_V5,桌面 V5.0 的开始菜单“最近添加”最多显示几款应用？,最近安装的 5 款应用。,zm_yhsc.pdf,10
+FD-004,dev,answerable,KB_A_Desktop_V5,桌面 V5.0 使用 Wi-Fi 热点有什么硬件前提？,电脑须安装支持热点功能的无线网卡。,zm_yhsc.pdf,13
+FD-005,eval,answerable,KB_A_Desktop_V5,桌面 V5.0 手动网络代理需要配置哪些信息？,代理服务器地址与端口。,zm_yhsc.pdf,13
+FD-006,dev,answerable,KB_A_Desktop_V5,桌面 V5.0 默认推荐的中密码复杂度要求至少多少位？,最少 8 位，并且至少包含大写字母、小写字母、数字、符号中的两种。,zm_yhsc.pdf,19
+FD-007,dev,answerable,KB_A_Desktop_V5,桌面 V5.0 改变系统语言之后需要执行什么操作才生效？,注销或重启后生效。,zm_yhsc.pdf,21
+FD-008,dev,answerable,KB_A_Desktop_V5,桌面 V5.0 启动终端的默认快捷键是什么？,Ctrl+Alt+T。,zm_yhsc.pdf,35
+FD-009,eval,answerable,KB_A_Desktop_V5,桌面 V5.0-G230 支持安装什么格式的软件包？,deb 格式的软件安装包。,zm_yhsc.pdf,40
+FD-010,dev,answerable,KB_A_Desktop_V5,桌面 V5.0 文件管理器中进入文件搜索状态的快捷键是什么？,Ctrl+F。,zm_yhsc.pdf,42
+FD-011,dev,answerable,KB_A_Desktop_V5,方德桌面 V5.0 自动安装时是否会建立备份还原分区？,会；自动安装时系统会自动创建备份还原分区，对出厂设置进行备份。,zm_yhsc.pdf,52
+FD-012,eval,answerable,KB_A_Desktop_V5,安装方德桌面操作系统 V5.0 至少需要多少可用硬盘空间？,至少 30G 可用硬盘空间。,zm_yhsc.pdf,73
+FD-013,dev,answerable,KB_B_Server_V4,方德高可信服务器操作系统 V4.0 的建议最低内存容量是多少？,不小于 512MB。,方德高可信服务器操作系统V4.0-用户手册.pdf,5
+FD-014,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 的建议最低可用硬盘空间是多少？,不小于 10GB。,方德高可信服务器操作系统V4.0-用户手册.pdf,5
+FD-015,eval,answerable,KB_B_Server_V4,方德服务器 V4.0 在缺失默认软件时，手册建议用什么命令从软件源安装？,yum install。,方德高可信服务器操作系统V4.0-用户手册.pdf,6
+FD-016,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 默认使用哪种 shell？,bash。,方德高可信服务器操作系统V4.0-用户手册.pdf,8
+FD-017,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 推荐至少设置哪四类分区？,/（root）、/home、/boot 和 swap。,方德高可信服务器操作系统V4.0-用户手册.pdf,21
+FD-018,eval,answerable,KB_B_Server_V4,方德服务器 V4.0 的 RAID 1 至少需要几个 RAID 分区？,至少两个 RAID 分区。,方德高可信服务器操作系统V4.0-用户手册.pdf,23
+FD-019,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 的 RAID 6 至少需要几个 RAID 分区？,至少四个 RAID 分区。,方德高可信服务器操作系统V4.0-用户手册.pdf,24
+FD-020,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 安装时对 root 密码的最短长度要求是什么？,至少 8 位，并包含大写字母、小写字母、数字、特殊符号中的三类。,方德高可信服务器操作系统V4.0-用户手册.pdf,29
+FD-021,eval,answerable,KB_B_Server_V4,方德服务器 V4.0 的新建用户名允许超过 32 个字符吗？,不允许，用户名不得超过 32 个字符，也不得包含空格。,方德高可信服务器操作系统V4.0-用户手册.pdf,31
+FD-022,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 授权认证前的默认试用期是多少天？,90 天。,方德高可信服务器操作系统V4.0-用户手册.pdf,73
+FD-023,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 安全加固平台围绕哪些核心技术构建防御体系？,以访问控制为核心，以可信计算为基础。,方德高可信服务器操作系统V4.0-用户手册.pdf,106
+FD-024,dev,answerable,KB_B_Server_V4,方德服务器 V4.0 中 /etc 目录主要保存什么？,系统配置文件。,方德高可信服务器操作系统V4.0-用户手册.pdf,114
+FD-025,eval,cross_kb_unanswerable,KB_A_Desktop_V5,方德高可信服务器 V4.0 授权激活前的默认试用期是多少天？,当前选择的知识库没有提供该版本产品的对应依据，应说明资料不足，不得引用未选知识库。,（跨库负例，无允许的证据）,
+FD-026,dev,cross_kb_unanswerable,KB_A_Desktop_V5,根据方德高可信服务器操作系统 V4.0 手册，该系统默认使用哪种 shell？,当前选择的知识库没有提供该版本产品的对应依据，应说明资料不足，不得引用未选知识库。,（跨库负例，无允许的证据）,
+FD-027,dev,cross_kb_unanswerable,KB_B_Server_V4,根据方德桌面 V5.0-G230 手册，支持什么格式的软件安装包？,当前选择的知识库没有提供该版本产品的对应依据，应说明资料不足，不得引用未选知识库。,（跨库负例，无允许的证据）,
+FD-028,eval,cross_kb_unanswerable,KB_B_Server_V4,根据方德桌面 V5.0-G230 手册，安装桌面系统至少需要多少 G 可用硬盘空间？,当前选择的知识库没有提供该版本产品的对应依据，应说明资料不足，不得引用未选知识库。,（跨库负例，无允许的证据）,

@@ -42,6 +42,14 @@ Qwen-PLUS:
   api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   api_key: "${ALIYUN_API_KEY}"
 
+Qwen-FLASH:
+  type: "openai_compatible"
+  model_name: "qwen3.7-flash-2026-07-15"
+  temperature: 0.3
+  max_tokens: 4096
+  api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key: "${ALIYUN_API_KEY}"
+
 XunFei-generalv3.5:
   type: "xunfei"
   model_name: "generalv3.5"

@@ -1,6 +1,7 @@
+import logging
 from pathlib import Path
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QCheckBox, QLabel, QTableWidgetItem, QPushButton, QVBoxLayout, QFrame, \
     QLineEdit, QTableWidget, QDialog, QMessageBox
@@ -10,12 +11,62 @@ from rag.rag_manager import RAGManager
 from ui.knowledge_base.upload_file import UploadDialog
 
 
+class DocumentIndexWorker(QThread):
+    """后台执行 RAG 索引，通过信号通知主线程更新控件和 SQLite。"""
+
+    result_ready = pyqtSignal(str, bool, int, str)
+
+    def __init__(self, file_path, kb_id, doc_id, parent=None):
+        super().__init__(parent)
+        self.file_path = file_path
+        self.kb_id = str(kb_id)
+        self.doc_id = str(doc_id)
+
+    def run(self):
+        rag = None
+        try:
+            rag = RAGManager()
+            success = rag.add_document(
+                self.file_path,
+                doc_id=self.doc_id,
+                knowledge_base=self.kb_id
+            )
+            if not success:
+                raise RuntimeError("索引失败，查看 RAG 日志")
+
+            result = rag.vector_db._collection.get(
+                where={"doc_id": {"$eq": self.doc_id}},
+                include=[]
+            )
+            count = len(result["ids"])
+            if count == 0:
+                raise RuntimeError("索引后没有有效文本分块")
+        except Exception as exc:
+            logging.exception("文档索引线程异常: %s", self.doc_id)
+            # 索引失败或校验异常时，尽量清理可能已经写入的部分向量。
+            if rag is not None:
+                try:
+                    if not rag.delete_document(self.doc_id):
+                        logging.error("清理失败文档的部分向量失败: %s", self.doc_id)
+                except Exception:
+                    logging.exception("清理失败文档的部分向量异常: %s", self.doc_id)
+            self.result_ready.emit(self.doc_id, False, 0, str(exc))
+            return
+
+        self.result_ready.emit(self.doc_id, True, count, "")
+
+
 class DatasetPage(QWidget):
     def __init__(self,current_kb=None,parent=None):
         super().__init__(parent)
         self.current_kb = current_kb
         self.mainwindow = parent
         self.repo = KnowledgeBaseRepository()
+        # 后台上传任务状态；同一页面内按顺序索引，避免并发写入。
+        self._pending_uploads = []
+        self._index_worker = None
+        self._upload_success = 0
+        self._upload_failed = 0
         self.setFixedSize(959, 607)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet("background: #FFFFFF; border-radius: 8px; border: 1px solid #E6E6E6;")
@@ -99,17 +150,28 @@ class DatasetPage(QWidget):
             self.tableWidget.setItem(row, 3, QTableWidgetItem("启用" if doc.status == "active" else "未启用"))
 
             # 解析状态 (Index changed from 5 to 4)
-            """目前先固定解析成功，后期根据实际调用get_status_style"""
-            status_label = QLabel("解析成功")
+            if doc.status == "indexing":
+                status_text = "解析中"
+                status_color = "#FF9500"
+            elif doc.status == "active" and (doc.chunk_count or 0) > 0:
+                status_text = "解析成功"
+                status_color = "#34C759"
+            elif doc.status == "failed":
+                status_text = "解析失败"
+                status_color = "#FF3B30"
+            else:
+                status_text = "等待解析"
+                status_color = "#8E8E93"
+            status_label = QLabel(status_text)
             status_label.setAlignment(Qt.AlignCenter)
-            status_label.setStyleSheet("""
+            status_label.setStyleSheet(f"""
                             font-family: 'Source Han Sans SC';
                             font-weight: 400;
                             font-size: 14px;
-                            color: #00CC00;
+                            color: {status_color};
                             background: #FFFFFF;
                             border-radius: 4px;
-                            border: 1px solid #00CC00;
+                            border: 1px solid {status_color};
                             padding: 2px 8px;
                         """)
             self.tableWidget.setCellWidget(row, 4, status_label) # Index changed from 5 to 4
@@ -314,6 +376,10 @@ class DatasetPage(QWidget):
         mainLayout.addWidget(self.tableWidget)
 
     def add_document(self):
+        if self._index_worker is not None:
+            QMessageBox.information(self, "提示", "正在建立索引，请等待完成")
+            return
+
         if hasattr(self, 'upload_dialog'):
             self.upload_dialog.close()
         self.upload_dialog = UploadDialog(self)  # 确保传递parent参数
@@ -334,40 +400,86 @@ class DatasetPage(QWidget):
         self.upload_dialog.move(int(dialog_x), int(dialog_y))
 
         if self.upload_dialog.exec_() == QDialog.Accepted:
-            rag_manager = RAGManager()
-            success_count = 0
+            file_paths = self.upload_dialog.get_selected_files()
+            if not file_paths:
+                return
 
-            for file_path in self.upload_dialog.get_selected_files():
-                # TODO: 事务保证
+            self._pending_uploads = []
+            self._upload_success = 0
+            self._upload_failed = 0
+
+            for file_path in file_paths:
                 try:
-                    # 添加到数据库
                     doc_data = {
                         'kb_id': self.current_kb.id,
                         'filename': Path(file_path).name,
                         'file_path': str(file_path),
-                        'file_type': Path(file_path).suffix[1:]
+                        'file_type': Path(file_path).suffix[1:],
+                        'status': 'indexing',
+                        'chunk_count': 0
                     }
                     doc_added = self.repo.add_document(doc_data)
-                    success_count += 1
-                    # TODO: 异步实现。只创建文档元信息到向量数据库，解析通过点击解析按钮后异步完成
-                    # 上传到向量数据库
-                    rag_manager.add_document(
-                        file_path,
-                        knowledge_base=self.current_kb.id,
-                        doc_id=doc_added.id
+                    if doc_added is None:
+                        raise RuntimeError("创建文档记录失败")
+                    self._pending_uploads.append(
+                        (file_path, self.current_kb.id, doc_added.id)
                     )
-                except Exception as e:
-                    print(f"文件上传失败: {str(e)}")
+                except Exception:
+                    self._upload_failed += 1
+                    logging.exception("创建上传任务失败: %s", file_path)
 
-            if success_count > 0:
-                # 刷新表格
-                self.mainwindow.load_documents()
-                QMessageBox.information(self, "提示", f"成功上传{success_count}个文件")
-            else:
-                QMessageBox.warning(self, "提示", "文件上传失败，请检查日志")
-    
+            self.mainwindow.load_documents()
+            self._start_next_index()
+
+    def _start_next_index(self):
+        """上一线程结束后才启动下一个文件的索引。"""
+        if self._pending_uploads:
+            file_path, kb_id, doc_id = self._pending_uploads.pop(0)
+            self._index_worker = DocumentIndexWorker(
+                file_path, kb_id, doc_id, self
+            )
+            self._index_worker.result_ready.connect(self._on_index_result)
+            self._index_worker.finished.connect(self._on_index_finished)
+            self._index_worker.start()
+            return
+
+        self.mainwindow.load_documents()
+        QMessageBox.information(
+            self, "索引完成",
+            f"成功 {self._upload_success} 个，失败 {self._upload_failed} 个"
+        )
+
+    def _on_index_result(
+        self, doc_id: str, success: bool, count: int, message: str
+    ):
+        """收到后台结果，在 GUI 主线程更新 SQLite。"""
+        status = "active" if success else "failed"
+        updated = self.repo.update_document_index(
+            doc_id, status, count if success else 0
+        )
+        if success and updated:
+            self._upload_success += 1
+        else:
+            self._upload_failed += 1
+            logging.error(
+                "文档入库失败: doc_id=%s, error=%s",
+                doc_id, message or "更新文档索引状态失败"
+            )
+        self.mainwindow.load_documents()
+
+    def _on_index_finished(self):
+        """释放已结束的线程，继续处理下一个文件。"""
+        if self._index_worker is not None:
+            self._index_worker.deleteLater()
+            self._index_worker = None
+        self._start_next_index()
+
     def delete_document(self, doc_id, row):
         """删除文件: 1. 数据库中的元信息 2. 向量数据库中的数据"""
+        if self._index_worker is not None:
+            QMessageBox.information(self, "提示", "正在建立索引，请等待完成后删除")
+            return
+
         rag_manager = RAGManager()
         try:
             doc = self.repo.get_document_by_id(doc_id)

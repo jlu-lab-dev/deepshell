@@ -1,5 +1,10 @@
+import ctypes
 import logging
 import sys
+
+# Windows 原生运行库兼容性处理，必须早于 PyQt、Chroma 等 C++ 扩展。
+if sys.platform == "win32":
+    ctypes.WinDLL(r"C:\Windows\System32\MSVCP140.dll")
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon

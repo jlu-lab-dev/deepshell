@@ -16,7 +16,7 @@ class ConfigManager:
         self.assistant_config: Dict[str, Any] = {}
         self.rag_config: Dict[str, Any] = {}
         self.app_config: Dict[str, Any] = {}
-        load_dotenv()
+        load_dotenv(dotenv_path=CONFIG_PATH)
         self._load_configs()
     
     def _load_configs(self) -> None:

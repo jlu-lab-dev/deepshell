@@ -29,6 +29,18 @@ class EnterKnowledgeBase(QWidget):
         self.center_on_screen()
         self.load_documents()  # 加载kb中文件
 
+    def closeEvent(self, event):
+        """防止索引线程运行时关闭知识库窗口。"""
+        worker = getattr(self.dataset_page, "_index_worker", None)
+        if worker is not None and worker.isRunning():
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "请稍候", "文档仍在索引中，请等待完成再关闭窗口"
+            )
+            event.ignore()
+            return
+        super().closeEvent(event)
+
     def load_documents(self):
         """加载知识库的文档"""
         if self.current_kb and self.current_kb.id:

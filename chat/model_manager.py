@@ -62,13 +62,22 @@ class ModelManager:
                     base_url=model_config.get('api_base'),
                     temperature=model_config.get('temperature')
                 )
-            elif model_type in ["xunfei"]:
+            elif model_type in ["xunfei", "openai_compatible"]:
+                api_base = model_config.get('api_base') or ''
+                api_key = model_config.get('api_key') or ''
+                if model_type == "openai_compatible" and (
+                    not api_base.strip() or not api_key.strip()
+                    or api_base.startswith('${') or api_key.startswith('${')
+                ):
+                    logging.warning("Model %s needs LLM_BASE_URL and ALIYUN_API_KEY in config/.env", model_name)
+                    continue
                 self.models[model_name] = ChatOpenAI(
                     model=model_config['model_name'],
                     streaming=True,
                     api_key=model_config.get('api_key'),
                     base_url=model_config.get('api_base'),
-                    temperature=model_config.get('temperature')
+                    temperature=model_config.get('temperature'),
+                    max_tokens=model_config.get('max_tokens') if model_type == 'openai_compatible' else None
                 )
     
     def get_model_config(self, model_name: str = None) -> Dict[str, Any]:
@@ -78,6 +87,8 @@ class ModelManager:
     def get_model(self, model_name: str) -> BaseChatModel: 
         """Get a specific model by name"""
         if model_name not in self.models:
+            if self.config_manager.model_config.get(model_name, {}).get('type') == 'openai_compatible':
+                raise ValueError(f"Model {model_name} needs LLM_BASE_URL and ALIYUN_API_KEY in config/.env")
             raise ValueError(f"Model {model_name} not found")
         return self.models[model_name]
 
