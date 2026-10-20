@@ -1,0 +1,9 @@
+# 绑定结果含当前机器上生成的 Chroma UUID，重建索引需重绑
+data/enterprise_bound.jsonl
+data/binding_report.json
+results/
+api_execution_status.json
+llm_input_preview.jsonl
+*.run.log
+__pycache__/
+*.pyc

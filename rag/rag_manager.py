@@ -258,8 +258,32 @@ class RAGManager:
     def search(self, query: str, k: int = 3,
                knowledge_bases: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """搜索并优化结果（如果启用 Self-RAG）。"""
+        if k <= 0:
+            return []
         cfg = self.config.get('hybrid_search', {})
         if cfg.get('enabled', False):
+            if cfg.get("fusion_strategy", "legacy") == "rrf":
+                from rag.rrf_fusion import rrf_fuse
+
+                allowed = [str(kb) for kb in (
+                    knowledge_bases if knowledge_bases is not None else ["default"]
+                )]
+                if not allowed:
+                    return []
+                bm25_results = self._bm25_search(
+                    query, top_k=cfg.get("keyword_top_k", 20), knowledge_bases=allowed
+                )
+                dense_results = self.base_search(
+                    query, k=cfg.get("semantic_top_k", 20), knowledge_bases=allowed
+                )
+                results = rrf_fuse(
+                    [bm25_results, dense_results], top_k=k * 2,
+                    rank_constant=cfg.get("rrf_k", 60)
+                )
+                if self.self_rag_flag:
+                    results = self._optimize_results(query, results, k)
+                return results
+
             results = self.hybrid_search(query, k=k * 2, knowledge_bases=knowledge_bases)
             # Self-RAG 优化后取 top k
             if self.self_rag_flag:

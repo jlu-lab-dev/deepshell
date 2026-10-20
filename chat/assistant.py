@@ -1,5 +1,6 @@
 # assistant.py
 
+import logging
 import uuid
 
 from typing import Optional, Tuple
@@ -7,6 +8,7 @@ from typing import Optional, Tuple
 from config.config_manager import ConfigManager
 from chat.model_manager import ModelManager
 from rag.rag_manager import RAGManager
+from rag.page_context import expand_pdf_page_context
 from chat.rag_citations import make_citation_docs, make_citation_prompt
 from database.repository.knowledge_base_repository import KnowledgeBaseRepository
 
@@ -68,6 +70,21 @@ class Assistant:
             results = self.rag_manager.search(
                 original_input, k=3, knowledge_bases=self.kb_list
             )
+            page_cfg = self.rag_manager.config.get("page_context", {})
+            if page_cfg.get("enabled", False):
+                original_count = len(results)
+                results = expand_pdf_page_context(
+                    vector_db=self.rag_manager.vector_db,
+                    results=results,
+                    knowledge_bases=self.kb_list,
+                    max_pages=int(page_cfg.get("max_pages", 3)),
+                    max_added_chunks=int(page_cfg.get("max_added_chunks", 24)),
+                    max_total_chars=int(page_cfg.get("max_total_chars", 6000)),
+                )
+                logging.info(
+                    "[ASSISTANT] 原始检索 %d 个 Chunk，同页扩展后 %d 个 Chunk",
+                    original_count, len(results)
+                )
             kb_names = {
                 str(kb.id): kb.name
                 for kb in KnowledgeBaseRepository().list_knowledge_bases()

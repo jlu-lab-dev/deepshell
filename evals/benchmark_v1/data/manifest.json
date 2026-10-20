@@ -1,0 +1,44 @@
+{
+  "version": "enterprise-benchmark-v1",
+  "build_date": "2026-10-20",
+  "source_pdfs": [
+    {
+      "knowledge_base": "KB_A_Desktop_V5",
+      "filename": "zm_yhsc.pdf",
+      "sha256": "c1c5c231fc1c0cc608813532c9f0ebbfc6a60f47636e20e7e27fbbab5de8b43b",
+      "pages": 98
+    },
+    {
+      "knowledge_base": "KB_B_Server_V4",
+      "filename": "方德高可信服务器操作系统V4.0-用户手册.pdf",
+      "sha256": "b456e5fcee0d09dabee85ca32496b5ae3a7e5f9b54ef65ba0011ee36bb6ac0d8",
+      "pages": 163
+    }
+  ],
+  "total": 364,
+  "counts_by_category": {
+    "legacy": 29,
+    "faq": 42,
+    "section": 156,
+    "shortcut": 22,
+    "runlevel": 7,
+    "hardware": 2,
+    "multi": 23,
+    "cross_kb": 29,
+    "paraphrase": 54
+  },
+  "counts_by_tier": {
+    "legacy": 29,
+    "explicit": 156,
+    "silver": 179
+  },
+  "counts_by_split": {
+    "dev": 260,
+    "eval": 104
+  },
+  "counts_by_kb": {
+    "KB_A_Desktop_V5": 187,
+    "KB_B_Server_V4": 177
+  },
+  "critical_note": "Silver and legacy_unreviewed are not human-gold; page excerpts/quotes verified against source PDF, not fully human-validated semantic Q/A. Gold Chroma IDs must be bound after import."
+}
