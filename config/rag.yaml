@@ -33,11 +33,20 @@ feedback:
 
 hybrid_search:
   enabled: true
+  fusion_strategy: rrf  # 改为 rrf 后重启 GUI，启用倒数排名融合
+  rrf_k: 60
   keyword_weight: 0.3
   semantic_weight: 0.7
   score_threshold: 0.3   # 融合分数低于此值的结果将被过滤
   keyword_top_k: 20      # BM25 预取数量
   semantic_top_k: 20     # 语义预取数量
+
+# 检索后补充命中 PDF 页的其他真实分块，字符预算仅计算新增原文。
+page_context:
+  enabled: true
+  max_pages: 3
+  max_added_chunks: 24
+  max_total_chars: 6000
 
 memory:
   compress_enabled: true

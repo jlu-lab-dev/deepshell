@@ -204,6 +204,7 @@ def test_assistant_uses_numbered_evidence_without_internal_json(monkeypatch, has
     assistant.kb_list = ["server"]
     assistant.model_manager = Mock()
     assistant.rag_manager = Mock()
+    assistant.rag_manager.config = {}
     assistant.rag_manager.search.return_value = [record("a")] if has_results else []
     repo = Mock()
     repo.list_knowledge_bases.return_value = [SimpleNamespace(id="server", name="服务器 V4")]
