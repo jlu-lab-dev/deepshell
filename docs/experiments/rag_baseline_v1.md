@@ -48,7 +48,8 @@ Hybrid+Page 的覆盖率比 Hybrid 高 8.61 个百分点；RRF+Page 比 RRF 高 
 ## 复现与产物管理
 
 共享评测模块已由 `evals/day3` 迁移至 `evals/retrieval`；RRF 实现、题集、测试、
-可选生成适配器和参考补丁均保留。默认不执行生成 API。
+可选生成适配器均保留。旧 Day3 接入说明和参考补丁已清理，RRF 实现和回归测试继续保留。
+默认不执行生成 API。
 
 ```powershell
 uv run --no-sync python -m pytest evals/benchmark_v1/tests evals/retrieval/tests tests/test_rrf_integration.py tests/test_page_context.py -q

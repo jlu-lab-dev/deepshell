@@ -44,9 +44,9 @@ hybrid_search:
 # 检索后补充命中 PDF 页的其他真实分块，字符预算仅计算新增原文。
 page_context:
   enabled: true
-  max_pages: 3
-  max_added_chunks: 24
-  max_total_chars: 6000
+  max_pages: 1
+  max_added_chunks: 12
+  max_total_chars: 2500
 
 memory:
   compress_enabled: true

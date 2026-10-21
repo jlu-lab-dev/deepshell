@@ -75,6 +75,54 @@ uv run --no-sync python -m evals.benchmark_v1.judge --details evals/benchmark_v1
 代理连接重置时，OpenAI 兼容接口可用 `--direct-api` 在本次调用中忽略系统代理，仍校验 TLS。
 模型配置和 API 费用需单独管理；生成与 Judge 指标需结合人工抽查解读。
 
+## Qwen 端到端方案对照
+
+`answer_experiment.py` 对比冻结的 Hybrid+Page 和 Hybrid+Table+Page，复用真实
+Chroma Chunk、表格旁路和同页扩展。固定 Top-3、1 页 / 新增 12 块 / 新增 2500 字符，
+不修改数据、索引或 GUI。两方法按题交替运行，使用相同生成提示及参数。
+默认 Qwen-FLASH 生成、Qwen-PLUS 独立调用评分，温度均为 0。
+生成端 Qwen3 默认显式关闭思考模式；需要时使用 `--enable-thinking`，该设置也参与续跑校验。
+思考开关遵循[阿里云官方 API 说明](https://www.alibabacloud.com/help/zh/model-studio/deep-thinking)，
+只作用于本实验，不修改 GUI 模型配置。空回答或被截断的输出记为调用失败并保存结束原因与 token 数，不能直接参与评分。
+生成模型只看到问题和实际上下文；参考答案、Gold 事实与 OR 备选原文只交给评委。
+
+先检查分母和配置，此命令不连接 Chroma 或模型，也不创建结果目录：
+
+```powershell
+uv run --no-sync python -m pytest evals/benchmark_v1/tests/test_answer_experiment.py -q
+uv run --no-sync python -m evals.benchmark_v1.answer_experiment --dry-run
+```
+
+真实调用会产生生成和评分 API 费用。先用 Dev 小样本检查链路，再运行 42 道
+Explicit Eval（34 道 Gold、8 道真实负例；84 次生成、最多 84 次质量评分及 68 次引用核验）：
+
+```powershell
+uv run --no-sync python -m evals.benchmark_v1.answer_experiment --split dev --tier explicit --ids ENT-FAQ-0002,ENT-SHORT-0001,ENT-RUNLE-0002,ENT-CROSS-0001 --output-dir evals/benchmark_v1/results/answer_smoke
+uv run --no-sync python -m evals.benchmark_v1.answer_experiment --split eval --tier explicit --output-dir evals/benchmark_v1/results/answer_eval_explicit
+```
+
+可用 `--llm-model` / `--judge-model` 指定已有模型配置；`--max-tokens` 和
+`--judge-max-tokens` 默认均为 2048。`--direct-api` 仅对本次模型连接忽略环境代理，
+保留 TLS 验证。运行生成模型和评委模型可属于同一厂商，因此仍有评委偏差。
+
+输出 `manifest.json`、`details.jsonl`、`summary.json`、`summary.md`。保存实际完整证据、
+生成提示、答案、评委原文、事实/引用逐项判定、token usage 和各阶段耗时。
+质量评分与引用核验分开调用；引用核验仅看问题、实际证据和答案，不提供参考答案或 Gold，
+防止将“非必需但正确的补充说明”误判为错误引用。
+正确率和事实完整性只统计有效 Gold；拒答率只统计真实负例；未绑定题不混入负例。
+引用编号合法率单独计算，不能代替语义引用支持。引用准确性是逐答案的引用支持比例宏平均，
+Gold 答案未引用时计 0。评委看到的方法名被隐藏，但同源模型偏差仍需人工抽查。
+逐题端到端延迟包含检索、扩展、生成，不包含离线评分及初始化耗时。
+
+每条完成后保存进度；模型/评分失败立即停下并保留错误，失败不当作 0 分。
+续跑使用原命令加 `--resume`；已生成答案可直接重试评委，避免重复生成。
+数据、代码、模型参数、知识库映射及索引指纹不一致时拒绝续跑；已有结果禁止直接覆盖。
+保留首次独立 Eval 的结果，不根据其错题修改 Gold、表格事实或检索参数。
+本轮端到端结果、评分校准和待复核问题见
+[answer_comparison.md](../../docs/experiments/answer_comparison.md)。
+两道分区题的 PDF 原文核对及局部辅助复核结果见
+[answer_manual_review.md](../../docs/experiments/answer_manual_review.md)，原始自动评分保留。
+
 ## 指标
 
 - `base_fact_coverage` / `final_fact_coverage`：原始 Top-K / 扩展上下文覆盖的事实比例，再按题平均。

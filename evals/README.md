@@ -3,15 +3,16 @@
 正式基准入口为 [benchmark_v1](benchmark_v1/README.md)，通用检索评测工具位于
 [retrieval](retrieval/README.md)。正式实验总结见
 [rag_baseline_v1.md](../docs/experiments/rag_baseline_v1.md)。
+精排对照与技术选型结论见 [reranker_comparison.md](../docs/experiments/reranker_comparison.md)。
+当前 GUI 默认采用 Hybrid + Table + Page，集成与配置说明见 [retrieval](retrieval/README.md)。
 
 ```text
 evals/
 ├── benchmark_v1/     # 364 题数据、Gold 绑定、四方法对照与 Judge
-│   ├── data/         # all / dev / eval / manifest；本地绑定产物被 Git 忽略
-│   ├── results/      # 本地正式基线 dev_gold_v11，被 Git 忽略
+│   ├── data/         # 正式题集、manifest、table_facts；本地绑定产物被 Git 忽略
+│   ├── results/      # 正式基线、精排、表格实验及 GUI 链路验证，被 Git 忽略
 │   └── tests/
 └── retrieval/        # 通用检索、RRF、同页扩展与可选生成评测
-    ├── package/      # 历史 RRF 接入说明与参考补丁
     └── tests/
 ```
 
