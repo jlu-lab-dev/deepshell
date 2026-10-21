@@ -33,7 +33,7 @@ feedback:
 
 hybrid_search:
   enabled: true
-  fusion_strategy: hybrid_table  # 默认 Hybrid + 已核对表格；legacy / rrf 保留用于对照
+  fusion_strategy: rrf  # 改为 rrf 后重启 GUI，启用倒数排名融合
   rrf_k: 60
   keyword_weight: 0.3
   semantic_weight: 0.7

@@ -1,0 +1,34 @@
+--- a/rag/rag_manager.py
++++ b/rag/rag_manager.py
+@@ -247,6 +247,31 @@
+         """无论使用何种检索方式，都返回带 Chroma ID 和来源的统一结果。"""
+         cfg = self.config.get("hybrid_search", {})
+         if cfg.get("enabled", False):
++            # Day3: 显式选择 RRF 时才启用新算法；默认保留 legacy 便于公平对照。
++            if cfg.get("fusion_strategy", "legacy") == "rrf":
++                from rag.rrf_fusion import rrf_fuse
++
++                allowed = [str(kb) for kb in (
++                    knowledge_bases if knowledge_bases is not None else ["default"]
++                )]
++                if not allowed:
++                    return []
++                # 与原版相同的每路候选规模，只替换最终融合阶段。
++                bm25_results = self._bm25_search(
++                    query, top_k=cfg.get("keyword_top_k", 20), knowledge_bases=allowed
++                )
++                dense_results = self.base_search(
++                    query, k=cfg.get("semantic_top_k", 20), knowledge_bases=allowed
++                )
++                results = rrf_fuse(
++                    [bm25_results, dense_results],
++                    top_k=k * 2,
++                    rank_constant=cfg.get("rrf_k", 60),
++                )
++                if self.self_rag_flag:
++                    results = self._optimize_results(query, results, k)
++                return results
++
+             results = self.hybrid_search(query, k=k * 2, knowledge_bases=knowledge_bases)
+             if self.self_rag_flag:
+                 results = self._optimize_results(query, results, k)
