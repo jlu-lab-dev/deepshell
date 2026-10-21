@@ -262,6 +262,33 @@ class RAGManager:
             return []
         cfg = self.config.get('hybrid_search', {})
         if cfg.get('enabled', False):
+            if cfg.get("fusion_strategy") == "hybrid_table":
+                from database.repository.knowledge_base_repository import KnowledgeBaseRepository
+                from rag.table_retrieval import load_facts, table_hybrid_search
+
+                allowed = [str(kb) for kb in (
+                    knowledge_bases if knowledge_bases is not None else ["default"]
+                )]
+                if not allowed:
+                    return []
+                try:
+                    if getattr(self, "_table_facts", None) is None:
+                        self._table_facts = load_facts()
+                except (OSError, ValueError):
+                    logging.exception("[RAG] 表格事实文件不可用，回退 Hybrid Top-%d", k)
+                    results = self.hybrid_search(query, k=k, knowledge_bases=allowed)
+                else:
+                    name_to_id = {kb.name: str(kb.id)
+                                  for kb in KnowledgeBaseRepository().list_knowledge_bases()}
+                    results = table_hybrid_search(
+                        self, query, allowed, name_to_id, self._table_facts, k=k
+                    )
+                logging.info("[RAG] Hybrid+Table Top-%d: %d chunks, %d table hits",
+                             k, len(results), sum(bool(r.get("table_hit")) for r in results))
+                if self.self_rag_flag:
+                    results = self._optimize_results(query, results, k)
+                return results[:k]
+
             if cfg.get("fusion_strategy", "legacy") == "rrf":
                 from rag.rrf_fusion import rrf_fuse
 

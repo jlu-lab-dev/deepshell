@@ -33,7 +33,7 @@ feedback:
 
 hybrid_search:
   enabled: true
-  fusion_strategy: rrf  # 改为 rrf 后重启 GUI，启用倒数排名融合
+  fusion_strategy: hybrid_table  # 默认 Hybrid + 已核对表格；legacy / rrf 保留用于对照
   rrf_k: 60
   keyword_weight: 0.3
   semantic_weight: 0.7
@@ -44,9 +44,9 @@ hybrid_search:
 # 检索后补充命中 PDF 页的其他真实分块，字符预算仅计算新增原文。
 page_context:
   enabled: true
-  max_pages: 3
-  max_added_chunks: 24
-  max_total_chars: 6000
+  max_pages: 1
+  max_added_chunks: 12
+  max_total_chars: 2500
 
 memory:
   compress_enabled: true

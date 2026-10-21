@@ -1,0 +1,30 @@
+{"id": "desktop-short-01", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "切换到右侧工作区", "value": "Ctrl+Alt+右"}
+{"id": "desktop-short-02", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "切换到左侧工作区", "value": "Ctrl+Alt+左"}
+{"id": "desktop-short-03", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "在同一应用程序中切换", "value": "Super+`"}
+{"id": "desktop-short-04", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "在同一应用程序中反向切换", "value": "Shift+Super+`"}
+{"id": "desktop-short-05", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "在应用程序中切换", "value": "Super+Tab"}
+{"id": "desktop-short-06", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "在应用程序中反向切换", "value": "Shift+Super+Tab"}
+{"id": "desktop-short-07", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "直接切换窗⼝", "value": "Alt+Super+Tab"}
+{"id": "desktop-short-08", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "关闭窗口", "value": "Alt+F4"}
+{"id": "desktop-short-09", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 34, "section": "表6-1 快捷键", "label": "将窗口移到上方显示器", "value": "Shift+Super+上"}
+{"id": "desktop-short-10", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "将窗口移到下方显示器", "value": "Shift+Super+下"}
+{"id": "desktop-short-11", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "将窗口移到右侧显示器", "value": "Shift+Super+右"}
+{"id": "desktop-short-12", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "将窗口移到左侧显示器", "value": "Shift+Super+左"}
+{"id": "desktop-short-13", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "恢复窗口大小", "value": "Super+下"}
+{"id": "desktop-short-14", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "改变窗口大小", "value": "Alt+F8"}
+{"id": "desktop-short-15", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "改变窗口最大化状态", "value": "Alt+F10"}
+{"id": "desktop-short-16", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "显示桌面", "value": "Super+D"}
+{"id": "desktop-short-17", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "最⼤化窗⼝", "value": "Super+上"}
+{"id": "desktop-short-18", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "最小化窗口", "value": "Super+N"}
+{"id": "desktop-short-19", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "移动窗口", "value": "Alt+F7"}
+{"id": "desktop-short-20", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "启动截图工具", "value": "Print"}
+{"id": "desktop-short-21", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "启动终端", "value": "Ctrl+Alt+T"}
+{"id": "desktop-short-22", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "启动锁屏", "value": "Super+L"}
+{"id": "desktop-short-23", "kind": "shortcut", "knowledge_base": "KB_A_Desktop_V5", "source": "zm_yhsc.pdf", "page": 35, "section": "表6-1 快捷键", "label": "注销", "value": "Ctrl+Alt+删除"}
+{"id": "server-runlevel-0", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "0", "value": "停止系统运行。（不能将其设为默认运行级别）"}
+{"id": "server-runlevel-1", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "1", "value": "单用户模式，一般用于特别的系统管理工作，如root 口令丢失、文件系统检查等。"}
+{"id": "server-runlevel-2", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "2", "value": "多用户模式，但不支持网络文件系统（NFS）。"}
+{"id": "server-runlevel-3", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "3", "value": "完全多用户模式。"}
+{"id": "server-runlevel-4", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "4", "value": "系统保留，未定义。"}
+{"id": "server-runlevel-5", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "5", "value": "多用户模式，相对3 而言，默认以图形界面登录。"}
+{"id": "server-runlevel-6", "kind": "runlevel", "knowledge_base": "KB_B_Server_V4", "source": "方德高可信服务器操作系统V4.0-用户手册.pdf", "page": 7, "section": "表2-2 运行级别", "label": "6", "value": "系统重新启动，（不能将其设为默认运行级别）。"}

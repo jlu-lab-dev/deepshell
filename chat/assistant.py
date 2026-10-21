@@ -31,34 +31,58 @@ class Assistant:
         self.prompt_template = assistant_config.get("prompt_template", "You are a helpful assistant.")
         self.model = assistant_config.get("model", "DeepSeek-V3")
 
+    def _retrieve_rag_docs(self, user_input: str) -> list:
+        """聊天与 Agent 共用 Top-3 检索、同页扩展和真实来源转换。"""
+        if not self.kb_list:
+            return []
+        results = self.rag_manager.search(user_input, k=3, knowledge_bases=self.kb_list)
+        page_cfg = self.rag_manager.config.get("page_context", {})
+        if page_cfg.get("enabled", False):
+            original_count = len(results)
+            results = expand_pdf_page_context(
+                vector_db=self.rag_manager.vector_db,
+                results=results,
+                knowledge_bases=self.kb_list,
+                max_pages=int(page_cfg.get("max_pages", 1)),
+                max_added_chunks=int(page_cfg.get("max_added_chunks", 12)),
+                max_total_chars=int(page_cfg.get("max_total_chars", 2500)),
+            )
+            logging.info(
+                "[ASSISTANT] 原始检索 %d 个 Chunk，同页扩展后 %d 个 Chunk",
+                original_count, len(results),
+            )
+        kb_names = {str(kb.id): kb.name for kb in KnowledgeBaseRepository().list_knowledge_bases()}
+        return make_citation_docs(results, kb_names)
+
+    def build_rag_enriched_message(self, user_input: str) -> Tuple[str, list]:
+        """为普通聊天、流式聊天和 Agent 首轮构建统一的编号证据及来源元数据。"""
+        docs = self._retrieve_rag_docs(user_input)
+        if not self.kb_list:
+            return user_input, docs
+        if docs:
+            evidence = make_citation_prompt(docs)
+            return (
+                f"{user_input}\n\n请仅依据以下检索证据回答。"
+                "使用 [1]、[2] 等编号引用对应证据。只能引用实际提供的编号，"
+                "证据不足时请明确说明，不能编造文档或页码。\n\n"
+                f"{evidence}",
+                docs,
+            )
+        return (
+            f"{user_input}\n\n当前选中知识库没有返回相关证据。"
+            "请说明未检索到依据，不要虚构文档来源。",
+            docs,
+        )
+
     def chat(self, messages: list[str]) -> str:
-        import logging
-        
-        enhanced_message = messages[-1]
-        context_parts = []
-        
-        logging.info(f"[ASSISTANT] 开始处理查询: '{messages[-1]}'")
-
-        # 使用 RAG 模式，将知识库搜索结果注入
-        if len(self.kb_list):
-            logging.info(f"[ASSISTANT] 使用知识库: {self.kb_list}")
-            knowledge = self.rag_manager.get_relevant_context(messages[-1], knowledge_bases=self.kb_list)
-            context_parts.append(f"知识库信息：\n{knowledge}")
-
-        # 如果有上下文信息，则添加到消息中
-        if context_parts:
-            context_text = "\n\n".join(context_parts)
-            enhanced_message = f"{messages[-1]}\n\n参考以下信息回答用户问题：\n{context_text}"
-            messages[-1] = enhanced_message
-            logging.info(f"[ASSISTANT] 上下文增强完成，总长度: {len(context_text)} 字符")
-        else:
-            logging.info(f"[ASSISTANT] 无额外上下文，使用原始查询")
-        
+        messages = list(messages)
+        self.last_rag_docs = []
+        messages[-1], self.last_rag_docs = self.build_rag_enriched_message(messages[-1])
         return self.model_manager.chat(
             model_name=self.model,
             messages=messages,
             system_prompt=self.prompt_template,
-            session_id=self.session_id
+            session_id=self.session_id,
         )
 
     def chat_stream(self, messages: list[str]):
@@ -66,44 +90,7 @@ class Assistant:
         original_input = messages[-1]
         messages = list(messages)
         self.last_rag_docs = []
-        if self.kb_list:
-            results = self.rag_manager.search(
-                original_input, k=3, knowledge_bases=self.kb_list
-            )
-            page_cfg = self.rag_manager.config.get("page_context", {})
-            if page_cfg.get("enabled", False):
-                original_count = len(results)
-                results = expand_pdf_page_context(
-                    vector_db=self.rag_manager.vector_db,
-                    results=results,
-                    knowledge_bases=self.kb_list,
-                    max_pages=int(page_cfg.get("max_pages", 3)),
-                    max_added_chunks=int(page_cfg.get("max_added_chunks", 24)),
-                    max_total_chars=int(page_cfg.get("max_total_chars", 6000)),
-                )
-                logging.info(
-                    "[ASSISTANT] 原始检索 %d 个 Chunk，同页扩展后 %d 个 Chunk",
-                    original_count, len(results)
-                )
-            kb_names = {
-                str(kb.id): kb.name
-                for kb in KnowledgeBaseRepository().list_knowledge_bases()
-            }
-            self.last_rag_docs = make_citation_docs(results, kb_names)
-            if self.last_rag_docs:
-                evidence = make_citation_prompt(self.last_rag_docs)
-                messages[-1] = (
-                    f"{original_input}\n\n请仅依据以下检索证据回答。"
-                    "使用 [1]、[2] 等编号引用对应证据。只能引用实际提供的编号，"
-                    "证据不足时请明确说明，不能编造文档或页码。\n\n"
-                    f"{evidence}"
-                )
-            else:
-                messages[-1] = (
-                    f"{original_input}\n\n当前选中知识库没有返回相关证据。"
-                    "请说明未检索到依据，不要虚构文档来源。"
-                )
-
+        messages[-1], self.last_rag_docs = self.build_rag_enriched_message(original_input)
         self.model_manager.set_pending_rag_turn(
             self.session_id, original_input, self.last_rag_docs
         )
@@ -111,45 +98,8 @@ class Assistant:
             model_name=self.model,
             messages=messages,
             system_prompt=self.prompt_template,
-            session_id=self.session_id
+            session_id=self.session_id,
         )
-
-    def build_rag_enriched_message(self, user_input: str) -> Tuple[str, list]:
-        """同步构建带 RAG 上下文的用户消息（用于 Agent 首轮调用）。
-
-        与 chat_stream 不同，此方法不调用 LLM，仅完成 RAG 检索并返回增强文本。
-
-        Returns:
-            enriched_text: 带 RAG 上下文的字符串（供 LLM 使用）
-            rag_docs: [{source, content}]（供持久化用）
-        """
-        import logging
-        import json
-
-        context_parts = []
-        rag_docs = []
-
-        logging.info(f"[ASSISTANT_RAG] 开始 RAG 增强: '{user_input}'")
-
-        if len(self.kb_list):
-            logging.info(f"[ASSISTANT_RAG] 使用知识库: {self.kb_list}")
-            rag_results = self.rag_manager.search(user_input, k=3, knowledge_bases=self.kb_list)
-            if rag_results:
-                for result in rag_results:
-                    source = result.get('metadata', {}).get('source', 'Unknown')
-                    content_text = result.get('content', '')
-                    rag_docs.append({"source": source, "content": content_text})
-                    context_parts.append(f"[Document] (Source: {source})\n{content_text}")
-
-        if context_parts:
-            context_text = "参考以下信息回答用户问题：\n" + "\n\n".join(context_parts)
-            enriched_text = f"{user_input}\n\n{context_text}"
-            logging.info(f"[ASSISTANT_RAG] RAG 增强完成，共 {len(rag_docs)} 个文档")
-        else:
-            enriched_text = user_input
-            logging.info(f"[ASSISTANT_RAG] 无 RAG 结果，使用原始查询")
-
-        return enriched_text, rag_docs
 
     def set_selected_kb(self, selected_kb_id_list: list[int]):
         self.kb_list = selected_kb_id_list
