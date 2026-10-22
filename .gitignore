@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 /logs
+/evals/agent_results/
+/agent_workspace/
+/_hitl_review/
+/_hitl_*.txt
 # Virtual environments
 .venv/
 venv/

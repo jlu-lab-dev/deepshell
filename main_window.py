@@ -320,11 +320,20 @@ class MainWin(QWidget):
         self.agent_controller.workflow_step_finished.connect(self.handle_workflow_step_finished)
         self.agent_controller.finished_signal.connect(self.handle_agent_finished)
         self.agent_controller.error_signal.connect(self.handle_agent_error)
+        self._agent_approval_dialogs = {}
+        self.agent_controller.approval_requested.connect(self.handle_agent_approval_requested)
+        self.agent_controller.operation_approval_requested.connect(self.handle_agent_operation_approval_requested)
+        self.agent_controller.approval_closed.connect(self.handle_agent_approval_closed)
+        from PyQt5.QtWidgets import QApplication
+        application = QApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(self.cancel_agent_approvals)
 
         self.agent_thread.start()
 
     def handle_function_selection(self, function_name):
         """集中处理功能切换时的UI"""
+        self.cancel_agent_approvals()
         self.sendTask.stop_flag = True
         self.agent_thread.quit()
 
@@ -601,8 +610,45 @@ class MainWin(QWidget):
             # Fallback in case the 'start' signal was missed
             print(f"Warning: Could not find a widget for step_id '{step_id}' to update.")
 
+    def handle_agent_approval_requested(self, request_id: str, filename: str,
+                                        workspace: str, content: str, digest: str, operation=False):
+        """完整纯文本预览在 GUI 主线程创建，等待不会阻塞主线程。"""
+        from PyQt5.QtWidgets import QDialog
+        from ui.agent_approval_dialog import AgentApprovalDialog
+        worker = self.agent_controller._worker
+        if worker is None or worker._stop or worker._approval_id != request_id:
+            return
+        dialog = AgentApprovalDialog(filename, workspace, content, digest, parent=self, operation=operation)
+        self._agent_approval_dialogs[request_id] = dialog
+
+        def finished(result):
+            self._agent_approval_dialogs.pop(request_id, None)
+            self.agent_controller.resolve_approval(request_id, result == QDialog.Accepted)
+            dialog.deleteLater()
+
+        dialog.finished.connect(finished)
+        dialog.open()
+
+    def handle_agent_operation_approval_requested(self, review: dict):
+        self.handle_agent_approval_requested(review['request_id'], review['tool'],
+            review['effect'], review['content'], review['sha256'], operation=True)
+
+    def handle_agent_approval_closed(self, request_id: str):
+        dialog = self._agent_approval_dialogs.get(request_id)
+        if dialog is not None:
+            dialog.reject()
+
+    def cancel_agent_approvals(self):
+        self.agent_controller.cancel_pending_approval()
+        for dialog in list(self._agent_approval_dialogs.values()):
+            dialog.reject()
+
     def handle_agent_finished(self, final_message):
-        """Receives Agent successful completion signal."""
+        """保留 ReAct 执行过程，并将最终回答显示为独立助手气泡。"""
+        self.show_waiting_message(False)
+        if isinstance(final_message, str) and final_message.strip():
+            self.add_bubble_message(final_message.strip(), user_send=False)
+        # 添加气泡会间接禁用发送按钮，必须在气泡创建后恢复。
         self.input_field.set_send_button_status(True)
         self.current_workflow_container = None  # 重置容器
 
@@ -778,6 +824,7 @@ class MainWin(QWidget):
 
     # 新建对话处理逻辑（清空旧的ChatTask+新建新的ChatTask）
     def new_dialog_handle(self):
+        self.cancel_agent_approvals()
         # 先保存当前对话（防止中途切换导致消息未持久化）
         self._save_current_conversation()
 

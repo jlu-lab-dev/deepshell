@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 
 from shadow_window import ShadowWindow
 from config.config_manager import ConfigManager
+from config.gui_runtime import configure_gui_runtime
 from utils.init_logging import setup_logging
 
 
@@ -140,6 +141,7 @@ class SingleApplication(QApplication):
 
 
 if __name__ == '__main__':
+    configure_gui_runtime(ConfigManager().app_config)
     setup_logging()
 
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)

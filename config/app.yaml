@@ -12,3 +12,12 @@ description: |
 
 # logo 相对根目录的路径
 logo: "ui/icon/DeepShell/shell.png"
+
+# 正常 GUI 启用全部工具；有副作用的操作仍需逐次批准。
+agent:
+  all_tools_enabled: true
+  # 额外的工作区 create_text_file；原有工具由 all_tools_enabled 控制。
+  approved_write_enabled: true
+  workspace: "agent_workspace"
+  trace_enabled: true
+  trace_directory: "logs/agent_traces"

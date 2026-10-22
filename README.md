@@ -43,6 +43,12 @@ $ uv sync
 $ ./.venv/Scripts/python singleton_app.py
 ```
 
+正常启动后，在 GUI 选择已配置模型和 `AI Agent` 即可调用原有 40 个工具及
+`create_text_file`，全部经过 Registry、严格 Pydantic 校验和 Executor，无需手工设置环境变量。
+10 个只读工具直接执行，其余 31 个工具逐次弹窗审批。功能开关、工作区与 Trace
+保存在 `config/app.yaml` 的 `agent` 配置中。详情见
+[完整工具接入](docs/experiments/agent_tools_v2.md)。
+
 (4) 会议记录功能需要下载ffmpeg之后才能使用，配置好ffmpeg之后首次运行会自动下载依赖
 
 [FFmpeg配置](https://blog.csdn.net/Natsuago/article/details/143231558)
