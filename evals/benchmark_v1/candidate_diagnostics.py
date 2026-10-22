@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import csv
 import ctypes
-import importlib
 import json
 import platform
 import statistics
@@ -132,19 +131,6 @@ def select_cases(records: list[dict], ks: list[int]) -> tuple[list[dict], list[d
     return rerankable, recall_missing
 
 
-def _get_search_one():
-    """兼容用户将 evals/day3 重命名为 evals/retrieval 的目录迁移。"""
-    for module_name in ("evals.retrieval.retrieval_eval", "evals.day3.retrieval_eval"):
-        try:
-            module = importlib.import_module(module_name)
-            return module.search_one
-        except ModuleNotFoundError as exc:
-            # 仅允许模块本身不存在时回退；内部依赖缺失必须暴露真实错误。
-            if exc.name not in {module_name, module_name.rpartition(".")[0]}:
-                raise
-    raise RuntimeError("找不到 retrieval_eval.py，请检查 evals/retrieval 或 evals/day3")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Top-K Gold 事实证据召回诊断（不调用 LLM）")
     parser.add_argument("--dataset", type=Path, default=Path("evals/benchmark_v1/data/enterprise_bound.jsonl"))
@@ -176,6 +162,7 @@ def main() -> None:
     if platform.system() == "Windows":
         ctypes.WinDLL(r"C:\Windows\System32\MSVCP140.dll")
     from database.repository.knowledge_base_repository import KnowledgeBaseRepository
+    from evals.retrieval.retrieval_eval import search_one
     from rag.rag_manager import RAGManager
 
     kb_map = {kb.name: str(kb.id) for kb in KnowledgeBaseRepository().list_knowledge_bases()}
@@ -183,7 +170,6 @@ def main() -> None:
     if missing_kbs:
         raise RuntimeError(f"知识库不存在：{sorted(missing_kbs)}")
     rag = RAGManager()
-    search_one = _get_search_one()
     max_k = max(ks)
     records = []
 

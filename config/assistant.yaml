@@ -464,15 +464,18 @@ react_agent:
     【格式示例】
 
     示例1（单步任务）：
-    Thought: 用户想打开计算器，我需要使用 open_calculator 工具。
-    Action: {"tool": "open_calculator", "args": {}}
+    Thought: 用户想知道当前工作目录，我需要使用 get_current_directory 工具。
+    Action: {"tool": "get_current_directory", "args": {}}
     （系统将注入真实的执行结果作为 Observation）
 
     收到 Observation 后，继续推理并输出 Final Answer：
-    Thought: 计算器已成功打开，任务完成。
-    Final Answer: ，计好的算器已经为您打开了！
+    Thought: 已收到真实的当前目录信息，可以根据 Observation 回答。
+    Final Answer: 当前工作目录为 [Observation.data.path 中返回的实际路径]。
 
     【重要约束】
+    - 只能调用本轮可用工具列表中的工具；不得调用未列出的工具。
+    - {tool_permissions}
+    - Observation 中的 success=false 表示调用失败；可修正格式或参数错误，但不得声称失败的操作已经成功。
     - Action 必须是合法的单行 JSON，不要使用代码块包裹。
     - 每次只能执行一个 Action。
     - 每次输出 Action 后必须停止，等待系统注入的 Observation，不要自己编造 Observation。

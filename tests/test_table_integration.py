@@ -2,6 +2,7 @@
 
 import ctypes
 import sys
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -11,6 +12,7 @@ if sys.platform == "win32":
     ctypes.WinDLL(r"C:\Windows\System32\MSVCP140.dll")
 
 from chat import assistant as assistant_module
+from config.config_manager import ConfigManager
 from database.repository import knowledge_base_repository
 from rag.rag_manager import RAGManager
 from rag import table_retrieval
@@ -25,10 +27,8 @@ def chunk(cid, text, page=34, kb="desktop"):
 @pytest.fixture
 def app_rag(monkeypatch):
     rag = object.__new__(RAGManager.__wrapped__)
-    rag.config = {
-        "hybrid_search": {"enabled": True, "fusion_strategy": "hybrid_table"},
-        "page_context": {"enabled": True, "max_pages": 1, "max_added_chunks": 12, "max_total_chars": 2500},
-    }
+    # 使用应用真实默认配置，避免测试启用表格检索而 GUI 仍走旧路径。
+    rag.config = deepcopy(ConfigManager().get_rag_config())
     rag.self_rag_flag = False
     table = chunk("table", "移动窗口 Alt+F7")
     sibling = chunk("sibling", "同页原文：其他操作说明")

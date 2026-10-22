@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from evals.benchmark_v1.candidate_diagnostics import (
-    ELIGIBLE, _get_search_one, read_jsonl, score_groups,
+    ELIGIBLE, read_jsonl, score_groups,
 )
 from rag.cross_encoder_reranker import merge_candidates, rerank_with_bge
 
@@ -168,6 +168,7 @@ def main() -> None:
     if platform.system() == "Windows":
         ctypes.WinDLL(r"C:\Windows\System32\MSVCP140.dll")
     from database.repository.knowledge_base_repository import KnowledgeBaseRepository
+    from evals.retrieval.retrieval_eval import search_one
     from rag.rag_manager import RAGManager
     kb_map = {k.name: str(k.id) for k in KnowledgeBaseRepository().list_knowledge_bases()}
     questions = [q for q in read_jsonl(args.dataset)
@@ -183,7 +184,6 @@ def main() -> None:
     missing = {name for q in questions for name in q["knowledge_bases"]} - set(kb_map)
     if missing:
         raise RuntimeError(f"缺失知识库：{sorted(missing)}")
-    search_one = _get_search_one()
     rag = RAGManager()
     # 模型预热不计入单题推理耗时：用合法输入触发一次加载与首轮 forward。
     warmup_ms = 0.0

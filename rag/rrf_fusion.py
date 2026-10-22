@@ -1,4 +1,4 @@
-"""RAG 检索融合模块（Day 3）。
+"""RAG 检索融合模块。
 
 职责：按照 Chroma 记录 ID 合并 BM25、Dense 候选，使用 Reciprocal Rank Fusion
 重排，不对不同分数尺度做直接加权；不连接数据库，也不调用 LLM。

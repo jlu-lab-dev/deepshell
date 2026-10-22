@@ -83,7 +83,7 @@ def create_file(path, content=None):
             os.makedirs(directory, exist_ok=True)
         if os.path.exists(file_path):
             return atomic_result(False, f"文件已存在：{file_path}")
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, 'x', encoding='utf-8') as f:
             if content is not None:
                 f.write(content)
         return atomic_result(True, f"文件已创建：{file_path}")
@@ -433,7 +433,9 @@ def read_table_data(path: str):
 
         # 将DataFrame转换为JSON格式字符串，方便后续LLM处理
         # to_dict('records') 会生成 [{col1: val1, col2: val2}, ...] 的格式
-        table_json = df.to_dict(orient='records')
+        # pandas NaN is not valid JSON; missing cells are represented as null.
+        import json
+        table_json = json.loads(df.to_json(orient='records', date_format='iso', force_ascii=False))
         return atomic_result(True, f"成功读取表格数据，共 {len(df)} 行", table_data=table_json)
 
     except Exception as e:
@@ -458,51 +460,20 @@ def save_text_as_word_doc(directory: str, filename: str, content: str):
         return atomic_result(False, f"保存 Word 文件失败: {e}")
 
 
+def _prepare_cache_approval():
+    from sys_agent.cache_cleanup import prepare_cache_cleanup
+    return prepare_cache_cleanup()
+
+
 def clean_system_cache():
-    """
-    清理操作系统默认的临时/缓存文件夹，以释放磁盘空间。
-    能够自动识别 Windows, macOS, 和 Linux 的临时目录。
-    """
     try:
-        system = platform.system()
-        if system == "Windows":
-            temp_dir = Path(os.environ.get('TEMP', 'C:/Windows/Temp'))
-        elif system == "Darwin":  # macOS
-            temp_dir = Path.home() / "Library/Caches"
-        else:  # Linux
-            temp_dir = Path.home() / ".cache"
+        execute, _ = _prepare_cache_approval()
+        return execute()
+    except Exception as exc:
+        return atomic_result(False, f"缓存清理失败: {type(exc).__name__}")
 
-        if not temp_dir.exists() or not temp_dir.is_dir():
-            return atomic_result(False, f"缓存目录 '{temp_dir}' 不存在。")
 
-        cleaned_files_count = 0
-        cleaned_folders_count = 0
-        total_freed_space = 0
-
-        for item in temp_dir.iterdir():
-            try:
-                item_size = os.path.getsize(item) if item.is_file() else sum(
-                    f.stat().st_size for f in item.glob('**/*') if f.is_file())
-                if item.is_dir():
-                    shutil.rmtree(item)
-                    cleaned_folders_count += 1
-                else:
-                    item.unlink()
-                    cleaned_files_count += 1
-                total_freed_space += item_size
-            except Exception:
-                # 忽略正在被使用的文件
-                continue
-
-        freed_space_mb = round(total_freed_space / (1024 * 1024), 2)
-        message = (f"成功清理缓存。删除了 {cleaned_files_count} 个文件和 "
-                   f"{cleaned_folders_count} 个文件夹，释放了约 {freed_space_mb} MB 空间。")
-        return atomic_result(True, message,
-                             cleaned_files_count=cleaned_files_count,
-                             cleaned_folders_count=cleaned_folders_count,
-                             freed_space_mb=freed_space_mb)
-    except Exception as e:
-        return atomic_result(False, f"清理系统缓存时发生错误: {e}")
+clean_system_cache.approval_plan_factory = _prepare_cache_approval
 
 
 # 工具映射表

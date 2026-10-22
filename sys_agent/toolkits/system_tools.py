@@ -64,12 +64,24 @@ def shutdown_system():
         return atomic_result(False, f"关机失败: {e}")
 
 
-def run_program(command):
+def run_program(command, *, _cwd=None):
     try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        return atomic_result(True, "命令执行完成")
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60, cwd=_cwd)
+        return atomic_result(result.returncode == 0,
+                             "命令执行完成" if result.returncode == 0 else "命令执行失败",
+                             returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
+    except subprocess.TimeoutExpired:
+        return atomic_result(False, "命令等待超过 60 秒；已启动的子进程可能仍在运行")
     except Exception as e:
         return atomic_result(False, f"命令执行失败: {e}")
+
+
+def _prepare_run_program(command):
+    directory = os.getcwd()
+    return (lambda command: run_program(command, _cwd=directory)), {'working_directory': directory}
+
+
+run_program.approval_plan_factory = _prepare_run_program
 
 
 def set_wallpaper(image_path):

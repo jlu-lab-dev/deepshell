@@ -7,10 +7,18 @@ import logging
 import re
 import os
 import importlib
+import hashlib
+import threading
+import time
+import uuid
+from functools import partial
 
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 from chat.model_manager import ModelManager
+from sys_agent.tool_registry import ToolRegistry
+from sys_agent.tool_executor import ToolExecutor
+from sys_agent.agent_trace import TraceRecorder
 from config.config_manager import ConfigManager
 from chat.message_helpers import parse_message_content, get_agent_memory_content, get_summary_text, is_compressed
 
@@ -36,13 +44,15 @@ def _extract_action(text: str) -> dict | None:
         Action: {"tool": "foo", "args": {...}}
     Returns dict or None.
     """
-    action_match = re.search(r'Action\s*:\s*(\{.*\})', text, re.DOTALL)
-    if action_match:
-        try:
-            return json.loads(action_match.group(1))
-        except json.JSONDecodeError:
-            pass
-    return None
+    # JSONDecoder.raw_decode 能正确处理嵌套对象，也不会把后续 Thought/Observation 一起吞掉。
+    action_match = re.search(r"Action\s*:\s*", text)
+    if not action_match:
+        return None
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text[action_match.end():].lstrip())
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        return None
 
 
 def _extract_final_answer(text: str) -> str | None:
@@ -58,6 +68,7 @@ def _extract_final_answer(text: str) -> str | None:
 # ──────────────────────────────────────────────
 
 MAX_ITERATIONS = 8
+APPROVAL_WAIT_SECONDS = 60.0
 
 
 class ReActAgent:
@@ -79,22 +90,40 @@ class ReActAgent:
                  thought_chain_collector=None,
                  session_id: str | None = None,
                  history: list | None = None,
-                 rag_docs: list | None = None):
+                 rag_docs: list | None = None,
+                 trace_recorder: TraceRecorder | None = None,
+                 model_manager=None,
+                 approval_cb=None,
+                 allow_approved_write: bool = True):
         self.model_name = model_name
-        self.tool_schemas = tool_schemas
-        self.function_map = function_map
+        self.model_manager = model_manager if model_manager is not None else ModelManager()
+        report_handler = function_map.get('generate_report_text')
+        if getattr(report_handler, '__module__', '') == 'sys_agent.toolkits.data_analysis_tools':
+            function_map = dict(function_map)
+            function_map['generate_report_text'] = partial(report_handler, _llm=lambda prompt:
+                self.model_manager.chat(model_name=self.model_name, messages=[prompt],
+                    system_prompt='根据用户提供的数据生成报告，不调用工具。',
+                    session_id='agent_report_' + uuid.uuid4().hex))
+        # 按 GUI/历史评测配置注册工具；所有 Action 统一经过 Executor。
+        self.tool_registry = ToolRegistry.from_existing(tool_schemas, function_map,
+                                                       allow_approved_write=allow_approved_write)
+        self.tool_schemas = self.tool_registry.get_tool_schemas()
+        self.executor = ToolExecutor(self.tool_registry)
         self.step_cb = step_cb
         self.obs_cb = obs_cb
         self.final_cb = final_cb
         self.error_cb = error_cb
         self.stop_flag = stop_flag
+        self.approval_cb = approval_cb
         self.thought_chain_collector = thought_chain_collector
         self.session_id = session_id
         self.history = history or []
         self.rag_docs = rag_docs or []
         self.tool_results: list[dict] = []  # 收集本次运行的工具调用结果
+        self.trace = trace_recorder
+        if self.trace is None and os.environ.get("DEEPSHELL_AGENT_TRACE") == "1":
+            self.trace = TraceRecorder(os.environ.get("DEEPSHELL_AGENT_TRACE_DIR", "logs/agent_traces"))
 
-        self.model_manager = ModelManager()
         self._load_prompt()
 
     def _load_prompt(self):
@@ -102,6 +131,31 @@ class ReActAgent:
         prompt_template = config.get('prompt_template', '')
         tool_schemas_str = json.dumps(self.tool_schemas, ensure_ascii=False, indent=2)
         self.system_prompt = prompt_template.replace('{tool_schemas}', tool_schemas_str)
+        if self.tool_registry.full_tools:
+            permission = ("可使用本轮列出的全部工具。只读查询可直接调用；有副作用或额外模型外传的操作"
+                          "需等待本轮 GUI 用户逐次批准。拒绝、关闭或超时后不能执行，也不能绕用 Shell 规避审批。"
+                          "成功与否以 Observation 为准；不得在审批前声称已经完成。create_text_file 仍限专用工作区且不能覆盖。")
+        elif self.tool_registry.get("create_text_file") is not None:
+            permission = ("仅 create_text_file 可申请在专用工作区创建新的 .txt 文件，必须等待本轮用户批准；"
+                          "不得承诺审批前已完成写入。不得写入其他目录、覆盖、删除文件、运行程序、关机或执行 Shell。")
+        else:
+            permission = "不具备文件写入、删除、运行程序、关机或执行 Shell 命令的权限；相关请求应说明当前能力限制。"
+        self.system_prompt = self.system_prompt.replace('{tool_permissions}', permission)
+
+    def _trace(self, kind: str, **kwargs):
+        """脱敏 Trace 写入失败不能中断 Agent；日志只记录异常类别。"""
+        if self.trace is not None:
+            try:
+                self.trace.record(kind, **kwargs)
+            except Exception as exc:
+                logging.warning("[ReAct] trace recording failed: %s", type(exc).__name__)
+
+    def _finish_trace(self, reason: str, iteration: int | None = None):
+        if self.trace is not None:
+            try:
+                self.trace.finish(reason, iteration=iteration)
+            except Exception as exc:
+                logging.warning("[ReAct] trace finish failed: %s", type(exc).__name__)
 
     def run(self, user_input: str):
         """Execute the ReAct loop synchronously. Designed to be called from a QThread."""
@@ -115,9 +169,12 @@ class ReActAgent:
 
         # Agent 内部 LLM 调用使用派生的 session_id，避免与普通 Chat 记忆混淆
         agent_llm_session = f"react_agent_{self.session_id}" if self.session_id else None
+        consecutive_errors = 0  # 限制连续模型格式/参数错误，避免无意义循环。
+        self._trace("task_started", model_name=self.model_name)
 
         for iteration in range(1, MAX_ITERATIONS + 1):
             if self.stop_flag():
+                self._finish_trace("cancelled", iteration)
                 return
 
             step_id = f"react_think_{iteration}"
@@ -132,13 +189,17 @@ class ReActAgent:
                     session_id=agent_llm_session,
                 )
             except Exception as e:
+                self._finish_trace("model_error", iteration)
                 self.error_cb(f"模型调用失败: {e}")
                 return
 
             if self.stop_flag():
+                self._finish_trace("cancelled", iteration)
                 return
 
-            logging.info(f"[ReAct] iter={iteration} response=\n{response}")
+            self._trace("model_result", iteration=iteration, code="RESPONSE_RECEIVED")
+            # 避免把完整模型消息/工具参数写入日志（可能包含用户敏感输入）。
+            logging.debug("[ReAct] iteration=%s received_model_response", iteration)
 
             # ── Check for Final Answer ────────────────────────────────────
             final_answer = _extract_final_answer(response)
@@ -155,6 +216,7 @@ class ReActAgent:
                         "observation": thought_text or "推理完成",
                         "success": True,
                     })
+                self._finish_trace("completed", iteration)
                 self.final_cb(final_answer)
                 return
 
@@ -164,102 +226,123 @@ class ReActAgent:
             self.obs_cb(step_id, True, thought_part or response.strip())
 
             if action is None:
-                # No action and no final answer — treat whole response as final answer
-                # ── 收集推理链：无 Action 分支 ──
+                # 模型明确尝试 Action 却没给出合法 JSON，不能把错误格式当成最终答案。
+                if re.search(r"Action\s*:", response):
+                    consecutive_errors += 1
+                    obs_text = "PARSE_ERROR: Action 后必须是合法 JSON，例如 Action: {\"tool\":\"get_current_directory\",\"args\":{}}"
+                    self.obs_cb(step_id, False, obs_text)
+                    if self.thought_chain_collector:
+                        self.thought_chain_collector({
+                            "iteration": iteration, "thought": thought_part,
+                            "action": None, "observation": obs_text, "success": False,
+                        })
+                    if consecutive_errors >= 2:
+                        self._finish_trace("parse_error", iteration)
+                        self.error_cb("模型连续两次生成了无效工具调用，已停止以避免误执行。")
+                        return
+                    messages.extend([response, f"Observation: {obs_text}"])
+                    continue
+
+                # 没有 Action / Final Answer 的正常闲聊仍保留旧版兼容行为。
                 if self.thought_chain_collector:
                     self.thought_chain_collector({
-                        "iteration": iteration,
-                        "thought": thought_part or response.strip(),
-                        "action": None,
-                        "observation": response.strip(),
-                        "success": True,
+                        "iteration": iteration, "thought": thought_part or response.strip(),
+                        "action": None, "observation": response.strip(), "success": True,
                     })
+                self._finish_trace("plain_answer", iteration)
                 self.final_cb(response.strip())
                 return
 
-            tool_name = action.get('tool', '')
-            tool_args = action.get('args', {})
-
-            print(f"tool name: {tool_name}")
-            print(f"tool args: {tool_args}")
-
-            # ── Execute tool ──────────────────────────────────────────────
+            tool_name = action.get("tool", "")
+            tool_args = action.get("args", {})
             act_step_id = f"react_action_{iteration}"
             self.step_cb(act_step_id, f"调用工具: {tool_name}")
 
-            if tool_name not in self.function_map:
-                obs_text = f"错误：工具 '{tool_name}' 不存在"
-                self.obs_cb(act_step_id, False, obs_text)
-                # ── 收集推理链：工具不存在 ──
-                if self.thought_chain_collector:
-                    self.thought_chain_collector({
-                        "iteration": iteration,
-                        "thought": thought_part or response.strip(),
-                        "action": action,
-                        "observation": obs_text,
-                        "success": False,
-                    })
-                self.error_cb(obs_text)
-                return
-
-            try:
-                result = self.function_map[tool_name](**tool_args)
-            except Exception as e:
-                obs_text = f"工具执行异常: {e}"
-                self.obs_cb(act_step_id, False, obs_text)
-                # ── 收集推理链：工具执行异常 ──
-                if self.thought_chain_collector:
-                    self.thought_chain_collector({
-                        "iteration": iteration,
-                        "thought": thought_part or response.strip(),
-                        "action": action,
-                        "observation": obs_text,
-                        "success": False,
-                    })
-                self.error_cb(obs_text)
-                return
-
-            success = result.get('success', False)
-            obs_message = result.get('message', str(result))
+            # 唯一执行入口：allowlist -> Pydantic 校验 -> 实际处理函数。
+            tool_result = self.executor.execute(tool_name, tool_args)
+            history_action = action
+            if tool_name == "create_text_file":
+                args = tool_args if isinstance(tool_args, dict) else {}
+                content = args.get("content", "")
+                history_action = {"tool": tool_name, "args": {
+                    "filename": args.get("filename", ""),
+                    "content_sha256": hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+                    if isinstance(content, str) else "INVALID_CONTENT",
+                }}
+            elif tool_result.code == "PENDING_APPROVAL":
+                history_action = {"tool": tool_name, "args": {
+                    "argument_keys": sorted(tool_args),
+                    "arguments_sha256": hashlib.sha256(json.dumps(tool_args, ensure_ascii=False,
+                        sort_keys=True).encode('utf-8')).hexdigest(),
+                }}
+            if tool_result.code == "PENDING_APPROVAL":
+                self._trace("tool_result", iteration=iteration, tool=tool_name,
+                            code="PENDING_APPROVAL", success=False, argument_keys=list(tool_args))
+                request_id = tool_result.data["request_id"]
+                review = self.executor.get_pending_approval(request_id)
+                decision = False
+                if review is not None and self.approval_cb is not None and not self.stop_flag():
+                    try:
+                        decision = self.approval_cb(review)
+                    except Exception:
+                        decision = False
+                if self.stop_flag():
+                    self.executor.resolve_pending_approval(request_id, False)
+                    self._finish_trace("cancelled", iteration)
+                    return
+                tool_result = self.executor.resolve_pending_approval(request_id, decision is True)
+                if decision is None and tool_result.code == "APPROVAL_DENIED":
+                    tool_result = tool_result.model_copy(update={
+                        "code": "APPROVAL_TIMEOUT", "message": "审批等待超时，操作未执行"})
+            result = tool_result.model_dump(mode="json")
+            self._trace("tool_result", iteration=iteration, tool=tool_name,
+                        code=tool_result.code, success=tool_result.success,
+                        elapsed_ms=tool_result.elapsed_ms,
+                        argument_keys=list(tool_args) if isinstance(tool_args, dict) else [])
+            success = tool_result.success
+            obs_message = f"[{tool_result.code}] {tool_result.message}"
             self.obs_cb(act_step_id, success, obs_message)
-
-            if not success:
-                # ── 收集推理链：工具执行失败 ──
-                if self.thought_chain_collector:
-                    self.thought_chain_collector({
-                        "iteration": iteration,
-                        "thought": thought_part or response.strip(),
-                        "action": action,
-                        "observation": obs_message,
-                        "success": False,
-                    })
-                self.error_cb(f"工具 '{tool_name}' 执行失败: {obs_message}")
-                return
-
-            # ── 收集推理链：工具执行成功 ──
             if self.thought_chain_collector:
                 self.thought_chain_collector({
                     "iteration": iteration,
                     "thought": thought_part or response.strip(),
-                    "action": action,
-                    "observation": obs_message,
-                    "success": True,
+                    "action": history_action, "observation": obs_message, "success": success,
+                    "tool_result": result,
                 })
 
-            # ── 收集工具调用结果（用于持久化记忆） ──
-            self.tool_results.append({
-                "tool": tool_name,
-                "args": tool_args,
-                "result_summary": obs_message,
-            })
+            if success:
+                consecutive_errors = 0
+                self.tool_results.append({
+                    "tool": tool_name, "args": history_action.get("args", {}), "result_summary": obs_message,
+                })
+            elif tool_result.code in {
+                "APPROVAL_DENIED", "APPROVAL_EXPIRED", "APPROVAL_INVALID", "APPROVAL_TIMEOUT", "WRITE_FAILED"
+            }:
+                self._finish_trace("tool_error" if tool_result.code == "WRITE_FAILED" else "permission_denied", iteration)
+                self.final_cb(f"操作未执行：{tool_result.message}。")
+                return
+            elif tool_result.code == "PERMISSION_DENIED":
+                # 未授权工具绝不执行，也不让模型反复请求同一个危险操作。
+                self._finish_trace("permission_denied", iteration)
+                self.error_cb(f"工具 '{tool_name}' 未获得执行权限。")
+                return
+            elif not tool_result.retryable:
+                self._finish_trace("tool_error", iteration)
+                self.error_cb(f"工具 '{tool_name}' 执行失败: {obs_message}")
+                return
+            else:
+                consecutive_errors += 1
+                if consecutive_errors >= 2:
+                    self._finish_trace("tool_error", iteration)
+                    self.error_cb(f"连续两次工具调用失败，最后错误：{obs_message}")
+                    return
 
-            # ── Append to conversation for next iteration ─────────────────
-            # Simulate multi-turn: append assistant response + observation as next user message
-            obs_json = json.dumps(result, ensure_ascii=False)
-            messages.append(response)           # assistant turn
-            messages.append(f"Observation: {obs_json}")  # observation as next user turn
+            # 保持原来的 ReAct 文本协议，给模型一次修正参数/工具选择的机会。
+            messages.append(response)
+            messages.append(f"Observation: {json.dumps(result, ensure_ascii=False)}")
 
         # Exceeded max iterations
+        self._finish_trace("max_iterations", MAX_ITERATIONS)
         self.error_cb(f"已达到最大推理轮次 ({MAX_ITERATIONS})，任务未完成。")
 
 
@@ -275,19 +358,62 @@ class _ReActWorker(QThread):
     workflow_step_finished = pyqtSignal(str, bool, str)
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
+    approval_requested = pyqtSignal(str, str, str, str, str)
+    operation_approval_requested = pyqtSignal(object)
+    approval_closed = pyqtSignal(str)
 
     def __init__(self, agent: ReActAgent, user_input: str):
         super().__init__()
         self.agent = agent
         self.user_input = user_input
         self._stop = False
+        self._approval_event = threading.Event()
+        self._approval_lock = threading.Lock()
+        self._approval_id = None
+        self._approval_decision = False
 
     def stop(self):
         self._stop = True
+        self._approval_event.set()
+
+    def resolve_approval(self, request_id: str, approved: bool):
+        """只更新锁和事件；可由 GUI 主线程直接通知 Worker。"""
+        with self._approval_lock:
+            if request_id != self._approval_id or self._approval_event.is_set():
+                return
+            self._approval_decision = approved is True
+            self._approval_event.set()
+
+    def ask_approval(self, review: dict) -> bool | None:
+        request_id = review["request_id"]
+        with self._approval_lock:
+            self._approval_id = request_id
+            self._approval_decision = False
+            self._approval_event.clear()
+        deadline = time.monotonic() + APPROVAL_WAIT_SECONDS
+        if 'tool' in review:
+            self.operation_approval_requested.emit(review)
+        else:
+            self.approval_requested.emit(request_id, review["filename"], review["workspace"],
+                                         review["content"], review["sha256"])
+        try:
+            while not self._stop and time.monotonic() < deadline:
+                if self._approval_event.wait(timeout=min(0.2, max(0.0, deadline - time.monotonic()))):
+                    break
+            with self._approval_lock:
+                if self._stop:
+                    return False
+                if time.monotonic() >= deadline or not self._approval_event.is_set():
+                    return None
+                return self._approval_decision
+        finally:
+            with self._approval_lock:
+                self._approval_id = None
+            self.approval_closed.emit(request_id)
 
     def run(self):
-        self._stop = False
         self.agent.stop_flag = lambda: self._stop
+        self.agent.approval_cb = self.ask_approval
 
         self.agent.step_cb = lambda sid, txt: self.workflow_step_started.emit(sid, txt)
         self.agent.obs_cb = lambda sid, ok, msg: self.workflow_step_finished.emit(sid, ok, msg)
@@ -310,6 +436,9 @@ class ReActAgentController(QObject):
     workflow_step_finished = pyqtSignal(str, bool, str)
     finished_signal = pyqtSignal(str)
     error_signal = pyqtSignal(str)
+    approval_requested = pyqtSignal(str, str, str, str, str)
+    operation_approval_requested = pyqtSignal(object)
+    approval_closed = pyqtSignal(str)
 
     def __init__(self, model: str, session_id: str | None = None):
         super().__init__()
@@ -350,6 +479,7 @@ class ReActAgentController(QObject):
         except Exception as e:
             logging.error(f"[ReActAgentController] Failed to load tools: {e}")
 
+        # Controller 保留原有工具清单，ReActAgent 初始化时按白名单过滤提示词与执行入口。
         return schemas, func_map
 
     # ── Public API (mirror AgentController) ──────────────────────────────
@@ -470,7 +600,18 @@ class ReActAgentController(QObject):
         self._worker.finished_signal.connect(capture_final)
         self._worker.finished_signal.connect(self.finished_signal)
         self._worker.error_signal.connect(self.error_signal)
+        self._worker.approval_requested.connect(self.approval_requested)
+        self._worker.operation_approval_requested.connect(self.operation_approval_requested)
+        self._worker.approval_closed.connect(self.approval_closed)
         self._worker.start()
+
+    def resolve_approval(self, request_id: str, approved: bool):
+        if self._worker is not None:
+            self._worker.resolve_approval(request_id, approved)
+
+    def cancel_pending_approval(self):
+        if self._worker is not None:
+            self._worker.stop()
 
     def switch_model(self, model: str):
         self.model_name = model

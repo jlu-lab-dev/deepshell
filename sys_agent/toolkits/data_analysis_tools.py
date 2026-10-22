@@ -29,7 +29,7 @@ def atomic_result(success, message, **kwargs):
 
 MAX_RECORDS_FOR_LLM = 200
 
-def generate_report_text(table_data: list, user_request: str):
+def generate_report_text(table_data: list, user_request: str, *, _llm=None):
     """
     调用大模型来分析数据并生成报告文本。
     """
@@ -68,7 +68,7 @@ def generate_report_text(table_data: list, user_request: str):
         # 3. 调用可复用的LLM函数
         print("--- 正在调用AI进行数据分析... ---")
         # 这里会使用 call_llm 函数中默认的 "deepseek-chat" 模型
-        report_content = call_llm(prompt)
+        report_content = (_llm or call_llm)(prompt)
         print("--- AI分析完成。---")
 
         # 4. 检查调用是否成功
