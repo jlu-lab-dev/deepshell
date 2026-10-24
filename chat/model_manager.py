@@ -158,6 +158,12 @@ class ModelManager:
             config={"configurable": {"session_id": session_id}}
         )
     
+    def chat_once(self, model_name: str, messages: List[str], system_prompt: str = None, session_id=None) -> str:
+        """Agent 已提供完整上下文；不再用 RunnableWithMessageHistory 重复累积。"""
+        prepared = ([SystemMessage(content=system_prompt)] if system_prompt else [])
+        prepared.extend(HumanMessage(content=message) for message in messages)
+        return ''.join(chunk.content for chunk in self.get_model(model_name).stream(prepared))
+
     def chat(self, model_name: str, messages: List[str], system_prompt: str = None, session_id: str = 'default') -> str:
         """Generate response using specified model
         

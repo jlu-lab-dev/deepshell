@@ -44,7 +44,7 @@ Qwen-PLUS:
 
 Qwen-FLASH:
   type: "openai_compatible"
-  model_name: "qwen3.8-flash"
+  model_name: "qwen3.8-max-0902"
   temperature: 0.3
   max_tokens: 4096
   api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"

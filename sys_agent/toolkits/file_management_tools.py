@@ -95,12 +95,14 @@ def read_file(path):
     try:
         file_path = expanduser(os.path.normpath(path))
         if not os.path.exists(file_path):
-            return atomic_result(False, f"文件不存在：{file_path}")
+            return atomic_result(False, '目标文件不存在；未读取内容', error_code='NOT_FOUND', exists=False)
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         return atomic_result(True, f"文件读取成功", content=content)
+    except FileNotFoundError:
+        return atomic_result(False, '目标文件不存在；未读取内容', error_code='NOT_FOUND', exists=False)
     except Exception as e:
-        return atomic_result(False, f"读取文件失败: {e}")
+        return atomic_result(False, f"读取文件失败: {type(e).__name__}", error_code='READ_FAILED')
 
 
 def write_file(path, content):
@@ -228,6 +230,8 @@ def find_file(filename, path=".", nums=-1):
 
         # 使用经过检查和处理的路径
         full_path = expanduser(os.path.normpath(search_path))
+        if not os.path.isdir(full_path):
+            return atomic_result(False, '搜索目录不存在', error_code='NOT_FOUND', found_paths=[])
 
         matches = []
         for root, dirs, files in os.walk(full_path):
@@ -235,12 +239,12 @@ def find_file(filename, path=".", nums=-1):
                 if filename in f:
                     matches.append(os.path.join(root, f))
                     if nums > 0 and len(matches) >= nums:
-                        return atomic_result(True, f"找到{len(matches)}个匹配文件", found_files=matches)
+                        return atomic_result(True, f"找到{len(matches)}个匹配文件", found_paths=matches)
 
         if matches:
             return atomic_result(True, f"找到{len(matches)}个匹配文件: " + ", ".join(m for m in matches), found_paths=matches)
         else:
-            return atomic_result(False, "未找到匹配文件", found_paths=[])
+            return atomic_result(True, "未找到匹配文件", found_paths=[], lookup_status='NOT_FOUND')
 
     except Exception as e:
         # 现在的错误信息会更具体，因为我们已经处理了 NoneType 的情况

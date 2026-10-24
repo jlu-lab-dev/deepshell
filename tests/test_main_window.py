@@ -35,6 +35,13 @@ def main_window(qtbot_session):
     window.show()
     QtTest.QTest.qWait(500)  # Wait for the window to be fully initialized
     yield window
+    # MainWin starts a controller QThread even when this test sends no task.
+    # Closing the widget alone leaves it running until a later GC can abort Qt.
+    window.cancel_agent_approvals()
+    window.timer.stop()
+    window.timerSend.stop()
+    window.agent_thread.quit()
+    assert window.agent_thread.wait(2000)
     window.close()
 
 
@@ -63,4 +70,4 @@ def test_main_window_interaction(main_window, qtbot_session):
     # button = main_window.findChild(QPushButton, "sendButton")
     # qtbot_session.mouseClick(button, Qt.LeftButton)
     # # QtTest.QTest.qWait(1000)  # Wait for the action to complete
-    # pass 
+    # pass

@@ -57,6 +57,15 @@ def test_api_error_cannot_be_scored_as_a_successful_denial(tmp_path):
     assert evaluation.aggregate([row], 'qwen')['model_error_count'] == 1
 
 
+def test_full_eval_capture_preserves_stateless_agent_calls():
+    def forbidden(**kwargs):
+        pytest.fail('Full-tool wrapper reintroduced model memory')
+    captured=evaluation.CapturedModel(SimpleNamespace(chat=forbidden,
+        chat_once=lambda **kwargs:'Final Answer: done'))
+    assert captured.chat(messages=['query']) == 'Final Answer: done'
+    assert len(captured.turns)==1
+
+
 def test_aggregate_denominators_and_empty_results():
     summary = evaluation.aggregate([], 'mock')
     assert summary['rule_pass_rate'] is None and summary['p95_task_ms'] is None

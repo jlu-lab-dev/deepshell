@@ -15,6 +15,14 @@ logo: "ui/icon/DeepShell/shell.png"
 
 # 正常 GUI 启用全部工具；有副作用的操作仍需逐次批准。
 agent:
+  # react_text：旧版 Prompt Action；native_fc：直接调用兼容 API tools/tool_calls。
+  tool_call_mode: native_fc
+  # GUI 默认使用原生 FC；SDK 自带重试关闭，由应用记录每次尝试。
+  native_fc_network:
+    request_timeout: 20.0
+    task_budget: 90.0
+    max_retries: 1
+    backoff_base: 0.5
   all_tools_enabled: true
   # 额外的工作区 create_text_file；原有工具由 all_tools_enabled 控制。
   approved_write_enabled: true

@@ -47,6 +47,71 @@ uv run --no-sync python -m evals.agent_eval --mode qwen --model Qwen-FLASH --lim
 uv run --no-sync python -m evals.agent_eval --mode qwen --model Qwen-FLASH --output-dir evals/agent_results
 ```
 
+30 题支持双协议对照，题目和评分规则保持一致：
+
+```powershell
+uv run --no-sync python -m evals.agent_eval --mode mock --tool-call-mode native_fc
+uv run --no-sync python -m evals.agent_eval --mode qwen --model Qwen-FLASH --tool-call-mode react_text
+uv run --no-sync python -m evals.agent_eval --mode qwen --model Qwen-FLASH --tool-call-mode native_fc
+```
+
+CLI 默认 `react_text`，不受 GUI 默认协议影响；两组分别保存到 `qwen_react_text_*` 与
+`qwen_native_fc_*`，汇总记录协议、模型 ID、温度及输出上限。本轮真实结果为文本 28/30、
+原生 FC 26/30，异常和适用范围见 [native_fc_comparison.md](../docs/experiments/native_fc_comparison.md)。
+
+GUI 当前默认使用 `native_fc`，评测 CLI 默认协议仍独立配置。原生可靠性排查入口如下，全程单进程串行、模拟工具，
+零自动重试用于观察首次故障；结果另存 `reliability_*`，不会覆盖上述成绩：
+
+```powershell
+uv run --no-sync python -m evals.native_fc_stability --phase all --repeats 50 --pairs 10 --request-timeout 20 --task-budget 90 --max-retries 0
+```
+
+`--phase api` 仅重复 FC；`load` 交替聊天/FC；`tasks` 运行原始 30 题的两组受控对照。
+多调用和工具分级验收另见 [native_fc_batch_v1.md](../docs/experiments/archive/native_fc_batch_v1.md)：
+`python -m evals.tool_acceptance` 生成 41 工具安全合同矩阵，
+`python -m evals.agent_multistep_eval --mode mock` 验证 20 道多步骤任务。
+真实验证使用 `--mode qwen`，可增加 `--suite all_tools`；全部 handler 为模拟，结果独立保存。
+
+状态化 v2 评测将任务目标与严格序列匹配分开，允许写后针对同一对象的限定只读核验。
+`agent_state.py` 维护内存文件状态，`state_contract` 声明预期操作、核验范围和安全约束；
+文件状态必须满足目标、审批及调用 ID 配对正确，并有最终回复，才计入模拟任务成功。
+进程、邮件、报告等工具仍使用模拟效果凭据，不代表真实业务或答案语义验收。
+历史严格评分保留；v2 新运行分别统计 `task_success`、`strict_sequence_match`、
+`safety_violations` 与 `extra_tool_calls`。CLI 每题的 True/False 仍是旧严格规则，
+状态成功率请读取 `summary.json` 的 `task_success_rate`。
+
+```powershell
+uv run --no-sync python -m pytest tests/test_agent_multistep_eval.py -q
+uv run --no-sync python -m evals.agent_multistep_eval --mode mock --suite all_tools --stateful
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite all_tools --stateful
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite multistep --stateful
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite holdout --stateful
+```
+
+`holdout` 是运行前冻结的 12 道新文件操作题，用于检验同一模拟环境内规则的适用性，
+不是实际系统验收。结果与限制见 [agent_state_eval_v2.md](../docs/experiments/agent_state_eval_v2.md)。
+
+v3 增加源/目标对象的操作前检查与操作后核验，并由 Executor 强制执行范围和读取预算。
+受限查询直接分派到范围后端，不调用普通全目录查询 handler。
+现有 v2 默认规则和数据不变；v3 命令如下，详细边界与当前接口状态见
+[agent_state_eval_v3.md](../docs/experiments/agent_state_eval_v3.md)。
+
+```powershell
+uv run --no-sync python -m pytest tests/test_agent_state_v3.py -q
+uv run --no-sync python -m evals.agent_multistep_eval --mode mock --suite holdout_v3 --contract-version 3
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite all_tools --contract-version 3
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite multistep --contract-version 3
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite holdout --contract-version 3
+uv run --no-sync python -m evals.agent_multistep_eval --mode qwen --suite holdout_v3 --contract-version 3
+```
+
+`holdout_v3` 使用新增冻结的 16 道对象操作题。GUI 未自动启用任务对象范围，
+当前 v3 的文件后端只在内存中运行，不能代替真实业务与 Qt 审批验收。
+
+受控文本组与 FC 共用 OpenAI SDK、非流式请求和网络策略，语义提示一致，保留必要的协议格式差异；
+它不等同于旧 LangChain 文本链路。API 成功率按 HTTP 尝试统计；工具选择只统计观察到 Action 的只读题，
+端到端规则通过率仍包含所有失败任务。源码快照与配置摘要随结果保存。
+
 每次运行生成独立结果目录，包含 `summary.json`、`details.jsonl` 和 `traces/`。
 保留一份代表性 Mock 运行；已完成的 Qwen 结果可移至 `agent_results/archive/` 本地归档，
 移动前后核对内容摘要，并同步更新实验报告中的路径。
@@ -81,9 +146,30 @@ Agent 30 题评测仍显式使用历史四工具配置，即使开启 GUI 全工
 
 ## 全工具 Qwen 评测
 
-当前 `Qwen-FLASH` 指向 `qwen3.8-flash`，完整 84 场景严格规则通过 84/84，
+当前 `Qwen-FLASH` 指向 `qwen3.8-max-0902`；此前 `qwen3.8-flash` 的文本协议完整 84 场景严格规则通过 84/84，
 结果与验证范围见 [agent_full_eval_qwen38.md](../docs/experiments/agent_full_eval_qwen38.md)。
 旧报告中的模型 ID 保留历史值，配置别名相同不代表使用同一模型。
+此前模型的状态化独立结果见 [qwen3.8-2.4t-a95b 评测](../docs/experiments/agent_state_eval_qwen38_24t.md)。
+当前模型的 v3 独立复评见 [qwen3.8-max-0902 结果](../docs/experiments/agent_state_eval_qwen38max0902.md)，
+前三组已完成，新增 16 题在第 9 题收到 HTTP 403 后中断，不能报告完整新题成功率。
+后续仅以 `deepseek-v4-flash-0731` 续测 009—016，结果为 5/8；与 Qwen 已结束的 001—008
+合并为单独的分阶段覆盖表后为 12/16，**是混合模型结果，不是任一模型的单模型成绩**。
+原始 Qwen 成绩未覆盖，详见 [DeepSeek 续测报告](../docs/experiments/archive/agent_state_eval_deepseek_followup.md)。
+
+后续工具语义与有界恢复使用 `runtime_revision=tool_recovery_v1`，新增运行状态记录，旧成绩保持不变。
+离线验证和当前 Executor 去重边界见 [工具状态与恢复](../docs/experiments/tool_state_recovery_v1.md)。
+529 项通过属于离线回归，不是新的真实模型成绩。此前 DeepSeek 续测的 5/8 保留为历史成绩；
+011、012、015 的原始失败保留。
+2026-10-24 的 `qwen3.8-flash` 新 Key 预检返回 HTTP 400 `Arrearage`，计划的 77 题未启动；
+该接口故障不计为任务成功率，见 [预检状态](../docs/experiments/archive/qwen38flash_acceptance_20261024.md)。
+随后以原配置 Key 和 `deepseek-v4.1-flash-1017` 完成当前恢复版本的 77 题复评，
+状态成功为回归 16/16、单工具 39/41、多步骤 20/20，合计 75/77；HTTP 请求 202/202 成功，
+调用与结果 ID 配对 77/77。原始失败与分组指标见 [最新完整报告](../docs/experiments/deepseek41flash_acceptance_20261024.md)。
+这些仍是固定合成任务及模拟 handler 的成绩；v3 16 题已经参与开发，应称回归题。
+
+评测 CLI 可用 `--model` 选择已有接口配置，用 `--model-id` 仅覆盖本次请求的模型 ID，
+用 `--task-ids` 精确指定题号。`--mode live` 为通用在线入口，旧 `--mode qwen` 继续兼容。
+这些选项不修改 GUI 模型配置，也不会自动合并历史成绩。
 
 当前实现说明和正式报告保留在 `docs/experiments/`，旧五工具审批与额度中断记录移至
 `docs/experiments/archive/`。已清理被正式结果替代的预检输出和重复 Mock；
