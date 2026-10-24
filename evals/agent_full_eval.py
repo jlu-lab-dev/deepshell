@@ -110,9 +110,10 @@ class CapturedModel:
         from sys_agent.react_agent import _extract_action, _extract_final_answer
         started = time.perf_counter()
         try:
-            response = self.delegate.chat(**kwargs)
+            response = getattr(self.delegate, 'chat_once', self.delegate.chat)(**kwargs)
         except Exception as exc:
-            self.turns.append({'error_type': type(exc).__name__,
+            from sys_agent.native_fc_session import classify_model_error
+            self.turns.append({**classify_model_error(exc),
                                'status_code': getattr(exc, 'status_code', None),
                                'provider_code': getattr(exc, 'code', None),
                                'elapsed_ms': round((time.perf_counter()-started)*1000, 3)})
@@ -237,6 +238,7 @@ def aggregate(rows, mode):
     tool_rows = [row for row in rows if row['category'] != 'no_tool']
     denied = [row for row in rows if row['category'] == 'denied']
     latencies = sorted(row['elapsed_ms'] for row in rows if row.get('elapsed_ms') is not None)
+    turns = [turn for row in rows for turn in row.get('model_turns', [])]
     return dict(mode=mode, count=len(rows), rule_pass=sum(row['rule_pass'] for row in rows),
                 rule_pass_rate=rate(rows, 'rule_pass'), tool_scenario_count=len(tool_rows),
                 tool_sequence_rate=rate(tool_rows, 'selected_expected_tools'),
@@ -246,6 +248,9 @@ def aggregate(rows, mode):
                 denied_zero_execution_count=sum(row['handler_calls'] == 0 for row in denied),
                 denied_count=len(denied), unauthorized_handler_calls=sum(row['unauthorized_handler_calls'] for row in rows),
                 model_error_count=sum(row['end_reason'] == 'model_error' for row in rows),
+                observed_model_call_count=len(turns),
+                model_call_completion_rate=sum('response' in t for t in turns)/len(turns) if turns else None,
+                api_attempt_success_rate=None,  # LangChain 内部 SDK 重试不可见，不能冒充 HTTP 尝试率。
                 model_calls=sum(row['model_calls'] for row in rows),
                 p95_task_ms=latencies[math.ceil(len(latencies)*.95)-1] if latencies else None,
                 categories={cat: {'count': len(items := [r for r in rows if r['category'] == cat]),

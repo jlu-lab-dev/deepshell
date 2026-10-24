@@ -94,16 +94,27 @@ class ReActAgent:
                  trace_recorder: TraceRecorder | None = None,
                  model_manager=None,
                  approval_cb=None,
-                 allow_approved_write: bool = True):
+                 allow_approved_write: bool = True,
+                 tool_call_mode: str = "react_text",
+                 native_client=None,
+                 native_model_config=None,
+                 native_request_policy=None,
+                 native_system_prompt=None):
+        # 保留原 ReAct Loop；原生 FC 只改变模型 Action 的产生和结果回传。
+        if tool_call_mode not in ("react_text", "native_fc"):
+            raise ValueError("tool_call_mode 只能是 react_text 或 native_fc")
+        self.tool_call_mode = tool_call_mode
+        self.native_client = native_client
+        self.native_model_config = native_model_config
+        self.native_request_policy = native_request_policy
+        self.native_system_prompt = native_system_prompt
         self.model_name = model_name
-        self.model_manager = model_manager if model_manager is not None else ModelManager()
+        self.model_manager = model_manager if model_manager is not None else (
+            ModelManager() if tool_call_mode == 'react_text' else None)
         report_handler = function_map.get('generate_report_text')
         if getattr(report_handler, '__module__', '') == 'sys_agent.toolkits.data_analysis_tools':
             function_map = dict(function_map)
-            function_map['generate_report_text'] = partial(report_handler, _llm=lambda prompt:
-                self.model_manager.chat(model_name=self.model_name, messages=[prompt],
-                    system_prompt='根据用户提供的数据生成报告，不调用工具。',
-                    session_id='agent_report_' + uuid.uuid4().hex))
+            function_map['generate_report_text'] = partial(report_handler, _llm=self._generate_report_content)
         # 按 GUI/历史评测配置注册工具；所有 Action 统一经过 Executor。
         self.tool_registry = ToolRegistry.from_existing(tool_schemas, function_map,
                                                        allow_approved_write=allow_approved_write)
@@ -126,6 +137,21 @@ class ReActAgent:
 
         self._load_prompt()
 
+    def _generate_report_content(self, prompt):
+        if self.tool_call_mode == 'native_fc':
+            from sys_agent.native_fc_session import NativeFCSession
+            session = NativeFCSession(self.native_model_config or ConfigManager().get_model_config(self.model_name), [],
+                history=[], user_input=prompt, permission_text='仅根据数据生成报告，不调用工具。',
+                client=self.native_client, policy=self._native_policy(), stop_flag=self.stop_flag,
+                observer=self._observe_model_request)
+            try:
+                return _extract_final_answer(session.next_react_text()) or ''
+            finally:
+                session.close()
+        return self.model_manager.chat(model_name=self.model_name, messages=[prompt],
+            system_prompt='根据用户提供的数据生成报告，不调用工具。',
+            session_id='agent_report_' + uuid.uuid4().hex)
+
     def _load_prompt(self):
         config = ConfigManager().get_assistant_config('react_agent')
         prompt_template = config.get('prompt_template', '')
@@ -140,6 +166,7 @@ class ReActAgent:
                           "不得承诺审批前已完成写入。不得写入其他目录、覆盖、删除文件、运行程序、关机或执行 Shell。")
         else:
             permission = "不具备文件写入、删除、运行程序、关机或执行 Shell 命令的权限；相关请求应说明当前能力限制。"
+        self.tool_permission_text = permission
         self.system_prompt = self.system_prompt.replace('{tool_permissions}', permission)
 
     def _trace(self, kind: str, **kwargs):
@@ -157,7 +184,167 @@ class ReActAgent:
             except Exception as exc:
                 logging.warning("[ReAct] trace finish failed: %s", type(exc).__name__)
 
+    def _native_policy(self):
+        from sys_agent.native_fc_session import RequestPolicy
+        if self.native_request_policy is not None:
+            return self.native_request_policy
+        config = getattr(ConfigManager(), 'app_config', {}).get('agent', {}).get('native_fc_network', {})
+        return RequestPolicy(**config)
+
+    def _observe_model_request(self, **event):
+        self._trace('model_request', iteration=getattr(self, '_iteration', 0), **event)
+
+    def runtime_status(self):
+        """Receipts are handler outcomes, not an independent filesystem verification."""
+        return {'operations': self.executor.operations.snapshot(),
+                'read_failures': getattr(self, '_read_failures', 0),
+                'not_found_reads': getattr(self, '_not_found_reads', 0),
+                'post_operation_reads': dict(getattr(self, '_post_operation_reads', {})),
+                'final_response_status': getattr(self, '_final_response_status', 'not_emitted')}
+
+    def _deliver_final(self, text, *, fallback=False):
+        receipts = self.executor.operations.snapshot()
+        if not fallback and receipts and getattr(self, '_read_failures', 0):
+            succeeded = [r['tool'] for r in receipts if r['status'] == 'SUCCEEDED']
+            text += '\n\n执行记录：工具报告成功的操作：' + ('、'.join(succeeded) or '无')
+            text += '。附加读取曾未找到对象或读取失败；操作结果与核验结果应分别查看，不能据此重复执行已完成操作。'
+        self._final_response_status = 'fallback' if fallback else 'model_answer'
+        self.final_cb(text)
+
+    def _recover_tool_result(self, result):
+        """Bounded model correction of reads/completed duplicates; no handler retry."""
+        from sys_agent.object_access import FILE_READ_TOOLS
+        if result.tool in FILE_READ_TOOLS and self.executor.operations.snapshot():
+            # Describes read outcomes only. A successful read is not proof of the task goal.
+            kind = 'succeeded' if result.success else 'failed_or_missing'
+            self._post_operation_reads[kind] += 1
+        completed_duplicate = (result.code == 'DUPLICATE_SIDE_EFFECT'
+                               and result.data.get('operation', {}).get('status') == 'SUCCEEDED')
+        if result.code == 'NOT_FOUND':
+            # Absence can be the expected result of a pre-create/post-move check.
+            # It consumes normal read/tool/iteration budgets, not failure recovery.
+            self._not_found_reads += 1
+            result.data['recovery'] = {'instruction': '目标不存在；按当前状态处理，不能据此重放已成功或结果不确定的操作。',
+                                       'operations': self.executor.operations.snapshot()}
+            return True
+        if result.code not in {'NOT_FOUND', 'READ_FAILED'} and not completed_duplicate:
+            return False
+        self._recovery_attempts += 1
+        if not completed_duplicate:
+            self._read_failures += 1
+        result.data['recovery'] = {
+            'remaining_corrections': max(0, 2 - self._recovery_attempts),
+            'instruction': '根据对象状态修正只读查询或说明核验限制；不得重放成功或结果不确定的操作。',
+            'operations': self.executor.operations.snapshot(),
+        }
+        return self._recovery_attempts <= 2
+
+    def _run_native_batch(self, session, iteration, response):
+        """先校验整批，再顺序调用现有 Executor；停止时仍补齐本地协议结果。"""
+        from sys_agent.tool_schema import ToolResult
+        from sys_agent.tool_policy import APPROVAL_EFFECTS
+        actions = session.last_actions
+        checks = [self.executor.preflight(a['tool'], a['args']) for a in actions]
+        denied = any(r is not None and r.code == 'PERMISSION_DENIED' for r in checks)
+        self._tool_call_count = getattr(self, '_tool_call_count', 0) + len(actions)
+        over_budget = self._tool_call_count > 24
+        terminal = 'permission_denied' if denied else 'tool_error' if over_budget else None
+        cancelled = False
+        block_effects = False
+        for index, (action, checked) in enumerate(zip(actions, checks)):
+            name, args = action['tool'], action['args']
+            self._tool_counts[name] = self._tool_counts.get(name,0) + 1
+            over_budget = over_budget or self._tool_counts[name] > 8 or time.monotonic() >= self._tool_deadline
+            if over_budget: terminal = terminal or 'tool_error'
+            sid = f'react_action_{iteration}_{index+1}'
+            self.step_cb(sid, f'顺序调用工具: {name}')
+            if self.stop_flag(): cancelled = True
+            if cancelled or denied or over_budget or (terminal or block_effects) and (name in APPROVAL_EFFECTS or name == 'create_text_file'):
+                result = checked or ToolResult(tool=name, success=False,
+                    code='CANCELLED' if cancelled else 'CALL_BUDGET_EXCEEDED' if over_budget else 'SKIPPED',
+                    message='前序调用需要核对或任务已停止，本项未执行')
+            elif checked is not None:
+                result = checked
+            else:
+                result = self.executor.execute(name,args)
+                if result.code == 'PENDING_APPROVAL':
+                    self._trace('tool_result',iteration=iteration,tool=name,code='PENDING_APPROVAL',success=False)
+                    ticket = result.data['request_id']
+                    review = self.executor.get_pending_approval(ticket)
+                    decision = False
+                    if review is not None and self.approval_cb is not None and not self.stop_flag():
+                        try: decision = self.approval_cb(review)
+                        except Exception: decision = False
+                    cancelled = bool(self.stop_flag())
+                    result = self.executor.resolve_pending_approval(ticket, decision is True and not cancelled)
+                    if cancelled:
+                        result = result.model_copy(update={'code':'CANCELLED','message':'任务已取消，操作未执行'})
+                    elif decision is None and result.code == 'APPROVAL_DENIED':
+                        result = result.model_copy(update={'code':'APPROVAL_TIMEOUT','message':'审批等待超时，操作未执行'})
+            recovered = self._recover_tool_result(result)
+            if result.code == 'READ_FAILED':
+                block_effects = True
+            session.add_tool_result(result.model_dump(mode='json'),action['call_id'])
+            self._trace('tool_result',iteration=iteration,tool=name,code=result.code,success=result.success,
+                        argument_keys=list(args) if isinstance(args,dict) else [])
+            self.obs_cb(sid,result.success,f'[{result.code}] {result.message}')
+            # 写操作的正文只进审批预览，不进入持久化的 Thought/Action。
+            history_args = args if name not in APPROVAL_EFFECTS and name != 'create_text_file' else {
+                'argument_keys':sorted(args) if isinstance(args,dict) else []}
+            if self.thought_chain_collector:
+                self.thought_chain_collector({'iteration':iteration,'thought':'顺序执行模型请求的工具',
+                    'action':{'tool':name,'args':history_args},'observation':f'[{result.code}] {result.message}',
+                    'success':result.success,'tool_result':result.model_dump(mode='json')})
+            if result.success:
+                self.tool_results.append({'tool':name,'args':history_args,'result_summary':result.message})
+            elif result.code in {'APPROVAL_DENIED','APPROVAL_TIMEOUT','APPROVAL_EXPIRED','PERMISSION_DENIED'}:
+                denied = True
+                terminal = 'permission_denied'
+            elif result.code in {'NOT_FOUND','READ_FAILED','DUPLICATE_SIDE_EFFECT'} and not recovered:
+                terminal = terminal or 'tool_error'
+            elif not recovered and not result.retryable and result.code not in {'SKIPPED','CANCELLED'}:
+                terminal = terminal or 'tool_error'
+        if cancelled:
+            self._finish_trace('cancelled',iteration)
+            return False
+        if terminal:
+            self._finish_trace(terminal,iteration)
+            if terminal == 'permission_denied' and not self.executor.operations.snapshot():
+                self._deliver_final('操作未执行或已停止：工具未授权或用户未批准后续操作。')
+            elif terminal == 'permission_denied':
+                self.error_cb('后续操作未获授权；已执行部分须以执行记录为准。')
+            else: self.error_cb('工具执行失败或调用预算耗尽，已停止后续写操作。')
+            return False
+        return True
+
     def run(self, user_input: str):
+        self._native_session = None
+        self._tool_call_count = 0
+        self._tool_counts = {}
+        self._tool_deadline = time.monotonic() + 120.0
+        self._read_failures = self._recovery_attempts = 0
+        self._not_found_reads = 0
+        self._post_operation_reads = {'succeeded': 0, 'failed_or_missing': 0}
+        self._final_response_status = 'not_emitted'
+        try:
+            self._run(user_input)
+        finally:
+            if self._native_session is not None:
+                self._native_session.finish_pending()
+                self._native_session.close()
+            receipts = self.executor.operations.snapshot()
+            if receipts and self._final_response_status == 'not_emitted' and not self.stop_flag():
+                succeeded = [r['tool'] for r in receipts if r['status'] == 'SUCCEEDED']
+                uncertain = [r['tool'] for r in receipts if r['status'] != 'SUCCEEDED']
+                parts = ['本轮未正常生成最终回答。']
+                if succeeded:
+                    parts.append('工具已报告执行成功：' + '、'.join(succeeded) + '。这不代表附加核验已通过。')
+                if uncertain:
+                    parts.append('执行结果尚不确定：' + '、'.join(uncertain) + '。请先核对实际状态。')
+                parts.append('请勿因本轮回复异常重复执行上述操作；本执行器内已阻止相同请求重放。')
+                self._deliver_final(''.join(parts), fallback=True)
+
+    def _run(self, user_input: str):
         """Execute the ReAct loop synchronously. Designed to be called from a QThread."""
         # 用历史消息初始化（克隆避免污染原始列表）
         messages = list(self.history)
@@ -172,7 +359,32 @@ class ReActAgent:
         consecutive_errors = 0  # 限制连续模型格式/参数错误，避免无意义循环。
         self._trace("task_started", model_name=self.model_name)
 
+        # 原生 FC 会话只在本轮用户任务中使用；配置直接来自已有 model.yaml。
+        # 这里不复制 ModelManager 的历史存储，不改变普通聊天、RAG 和 GUI 逻辑。
+        native_session = None
+        if self.tool_call_mode == "native_fc":
+            try:
+                from sys_agent.native_fc_session import NativeFCSession
+                config = self.native_model_config or ConfigManager().get_model_config(self.model_name)
+                native_session = NativeFCSession(
+                    config, self.tool_schemas,
+                    history=self.history,
+                    user_input=first_msg,
+                    permission_text=self.tool_permission_text,
+                    client=self.native_client,
+                    policy=self._native_policy(), stop_flag=self.stop_flag,
+                    observer=self._observe_model_request, system_prompt=self.native_system_prompt,
+                )
+                self._native_session = native_session
+            except Exception as exc:
+                from sys_agent.native_fc_session import classify_model_error
+                self._trace('model_result', iteration=0, success=False, **classify_model_error(exc))
+                self._finish_trace("model_error", 0)
+                self.error_cb(f"原生 FC 初始化失败（{type(exc).__name__}），请检查模型、工具定义及网络配置。")
+                return
+
         for iteration in range(1, MAX_ITERATIONS + 1):
+            self._iteration = iteration
             if self.stop_flag():
                 self._finish_trace("cancelled", iteration)
                 return
@@ -182,15 +394,29 @@ class ReActAgent:
 
             # ── LLM call ─────────────────────────────────────────────────
             try:
-                response = self.model_manager.chat(
-                    model_name=self.model_name,
-                    messages=messages,
-                    system_prompt=self.system_prompt,
-                    session_id=agent_llm_session,
-                )
+                if native_session is not None:
+                    # 原生 API 返回 tool_calls，由会话层转成当前 ReAct Loop 的 Action。
+                    response = native_session.next_react_text()
+                else:
+                    response = getattr(self.model_manager, 'chat_once', self.model_manager.chat)(
+                        model_name=self.model_name,
+                        messages=messages,
+                        system_prompt=self.system_prompt,
+                        session_id=agent_llm_session,
+                    )
             except Exception as e:
+                from sys_agent.native_fc_session import classify_model_error, ModelRequestCancelled
+                if self.stop_flag() or isinstance(e, ModelRequestCancelled):
+                    self._finish_trace('cancelled', iteration)
+                    return
+                self._trace('model_result', iteration=iteration, code=type(e).__name__, success=False,
+                            **classify_model_error(e))
                 self._finish_trace("model_error", iteration)
-                self.error_cb(f"模型调用失败: {e}")
+                kind = classify_model_error(e)['error_kind']
+                hint = {'timeout': '请求超时', 'connection': '网络连接失败', 'rate_limit': '服务限流',
+                        'http': '服务返回 HTTP 错误', 'budget': '任务请求预算已耗尽',
+                        'protocol': '模型响应协议无效'}.get(kind, '模型请求失败')
+                self.error_cb(f"{hint}（{type(e).__name__}）；已停止本轮，不会自动重新执行工具。")
                 return
 
             if self.stop_flag():
@@ -202,7 +428,7 @@ class ReActAgent:
             logging.debug("[ReAct] iteration=%s received_model_response", iteration)
 
             # ── Check for Final Answer ────────────────────────────────────
-            final_answer = _extract_final_answer(response)
+            final_answer = native_session.last_answer if native_session is not None else _extract_final_answer(response)
             if final_answer:
                 # Extract thought text (everything before Final Answer:)
                 thought_text = re.split(r'Final Answer\s*:', response)[0].strip()
@@ -217,11 +443,16 @@ class ReActAgent:
                         "success": True,
                     })
                 self._finish_trace("completed", iteration)
-                self.final_cb(final_answer)
+                self._deliver_final(final_answer)
                 return
 
+            if native_session is not None and native_session.last_actions:
+                self.obs_cb(step_id, True, response)
+                if not self._run_native_batch(native_session, iteration, response): return
+                continue
+
             # ── Check for Action ──────────────────────────────────────────
-            action = _extract_action(response)
+            action = native_session.last_action if native_session is not None else _extract_action(response)
             thought_part = re.split(r'Action\s*:', response)[0].strip()
             self.obs_cb(step_id, True, thought_part or response.strip())
 
@@ -250,7 +481,7 @@ class ReActAgent:
                         "action": None, "observation": response.strip(), "success": True,
                     })
                 self._finish_trace("plain_answer", iteration)
-                self.final_cb(response.strip())
+                self._deliver_final(response.strip())
                 return
 
             tool_name = action.get("tool", "")
@@ -294,6 +525,7 @@ class ReActAgent:
                 if decision is None and tool_result.code == "APPROVAL_DENIED":
                     tool_result = tool_result.model_copy(update={
                         "code": "APPROVAL_TIMEOUT", "message": "审批等待超时，操作未执行"})
+            recovered = self._recover_tool_result(tool_result)
             result = tool_result.model_dump(mode="json")
             self._trace("tool_result", iteration=iteration, tool=tool_name,
                         code=tool_result.code, success=tool_result.success,
@@ -319,27 +551,40 @@ class ReActAgent:
                 "APPROVAL_DENIED", "APPROVAL_EXPIRED", "APPROVAL_INVALID", "APPROVAL_TIMEOUT", "WRITE_FAILED"
             }:
                 self._finish_trace("tool_error" if tool_result.code == "WRITE_FAILED" else "permission_denied", iteration)
-                self.final_cb(f"操作未执行：{tool_result.message}。")
+                if not self.executor.operations.snapshot():
+                    self._deliver_final(f"操作未执行：{tool_result.message}。")
                 return
             elif tool_result.code == "PERMISSION_DENIED":
                 # 未授权工具绝不执行，也不让模型反复请求同一个危险操作。
                 self._finish_trace("permission_denied", iteration)
                 self.error_cb(f"工具 '{tool_name}' 未获得执行权限。")
                 return
-            elif not tool_result.retryable:
+            elif not recovered and (not tool_result.retryable or tool_result.code in {'NOT_FOUND','READ_FAILED'}):
                 self._finish_trace("tool_error", iteration)
                 self.error_cb(f"工具 '{tool_name}' 执行失败: {obs_message}")
                 return
-            else:
+            elif not recovered:
                 consecutive_errors += 1
                 if consecutive_errors >= 2:
                     self._finish_trace("tool_error", iteration)
                     self.error_cb(f"连续两次工具调用失败，最后错误：{obs_message}")
                     return
 
-            # 保持原来的 ReAct 文本协议，给模型一次修正参数/工具选择的机会。
-            messages.append(response)
-            messages.append(f"Observation: {json.dumps(result, ensure_ascii=False)}")
+            if native_session is not None:
+                # FC 必须回传 role=tool + 对应的 tool_call_id。
+                # 工具执行的全部权限检查、审批和 Trace 已由原 ReAct Loop 完成。
+                try:
+                    native_session.add_tool_result(result)
+                except Exception as exc:
+                    from sys_agent.native_fc_session import classify_model_error
+                    self._trace('model_result', iteration=iteration, success=False, **classify_model_error(exc))
+                    self._finish_trace("model_error", iteration)
+                    self.error_cb(f"原生 FC 工具结果回传失败（{type(exc).__name__}）；不会自动重新执行工具。")
+                    return
+            else:
+                # 原文本 ReAct 路径继续兼容之前的 30 题评测和 GUI。
+                messages.append(response)
+                messages.append(f"Observation: {json.dumps(result, ensure_ascii=False)}")
 
         # Exceeded max iterations
         self._finish_trace("max_iterations", MAX_ITERATIONS)
@@ -444,6 +689,9 @@ class ReActAgentController(QObject):
         super().__init__()
         self.model_name = model
         self.session_id = session_id
+        # 默认保持既有 ReAct 行为；GUI 通过 config/app.yaml 切换 Action 协议。
+        self.tool_call_mode = (ConfigManager().app_config.get("agent") or {}).get(
+            "tool_call_mode", "react_text")
         self._worker: _ReActWorker | None = None
         self._thought_chain: list = []
         self._tool_results: list[dict] = []       # 收集工具调用结果
@@ -495,7 +743,7 @@ class ReActAgentController(QObject):
             return
 
         db_messages = conversation_repo.get_messages(session_id)
-        for msg in db_messages:
+        for index, msg in enumerate(db_messages):
             if msg.role not in ("user", "assistant", "system"):
                 continue
 
@@ -523,6 +771,13 @@ class ReActAgentController(QObject):
                 entries = get_agent_memory_content(msg.content)
                 self._history.extend(entries)
             elif msg_type == "agent_workflow":
+                # MainWin 将同轮 workflow 和 compact memory 相邻保存；仅注入一份。
+                following = db_messages[index+1] if index+1 < len(db_messages) else None
+                paired = parse_message_content(following.content) if following is not None else {}
+                if (following is not None and following.role == 'assistant'
+                        and not is_compressed(following.content) and paired.get('type') == 'agent_memory'
+                        and paired.get('final_answer') == data.get('final_result')):
+                    continue
                 # 兼容旧数据：从完整工作流中提取工具结果和最终答案
                 thought_chain = data.get("thought_chain", [])
                 for tc in thought_chain:
@@ -591,6 +846,7 @@ class ReActAgentController(QObject):
             session_id=self.session_id,
             history=self._history,
             rag_docs=rag_docs,
+            tool_call_mode=self.tool_call_mode,
         )
 
         self._worker = _ReActWorker(agent, user_input)

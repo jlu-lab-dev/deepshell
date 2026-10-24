@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import ntpath
 from pathlib import Path
 
 MAX_CONTENT_BYTES = 2048
@@ -18,6 +19,50 @@ _WINDOWS_DEVICE = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", re
 
 class SandboxError(ValueError):
     """无效路径、内容或不满足沙箱边界。"""
+
+
+def reject_link_chain(target: Path, *, directory: bool = False) -> None:
+    """Shared reparse/link check for real scoped access and the text writer."""
+    for candidate in reversed((target, *target.parents)):
+        try:
+            info = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0):
+            raise SandboxError('路径不能包含符号链接或重解析点')
+        if (candidate != target or directory) and not stat.S_ISDIR(info.st_mode):
+            raise SandboxError('父路径必须是目录')
+
+
+def resolve_object_path(value: str, root: str, *, virtual: bool = False) -> str:
+    """Resolve a Windows task object, refusing traversal, ADS, devices and sibling roots.
+
+    Virtual mode uses identical lexical rules without touching the host filesystem.
+    Real mode additionally rechecks existing parents for symlinks/junctions.
+    """
+    if not isinstance(value, str) or not value or '\x00' in value or len(value) > 4096:
+        raise SandboxError('无效对象路径')
+    value = value.replace('/', '\\')
+    drive, tail = ntpath.splitdrive(value)
+    if not drive or len(drive) != 2 or drive[1] != ':' or not tail.startswith('\\'):
+        raise SandboxError('对象必须使用绝对本地磁盘路径')
+    for part in tail.split('\\'):
+        if not part:
+            continue
+        if part in ('.', '..') or ':' in part or any(c in part for c in '<>"|?*') or part.endswith((' ', '.')) or _WINDOWS_DEVICE.match(part):
+            raise SandboxError('路径穿越、设备名或别名不允许')
+    canonical = ntpath.normcase(ntpath.normpath(value))
+    boundary = ntpath.normcase(ntpath.normpath(str(root)))
+    try:
+        inside = ntpath.commonpath([boundary, canonical]) == boundary
+    except ValueError:
+        inside = False
+    if not inside:
+        raise SandboxError('对象位于任务根目录之外')
+    if not virtual:
+        reject_link_chain(Path(boundary), directory=True)
+        reject_link_chain(Path(canonical))
+    return canonical
 
 
 def validate_payload(filename: str, content: str) -> bytes:
@@ -45,15 +90,7 @@ class SandboxedTextWriter:
 
     def _check_parents(self) -> None:
         # Windows junction 不是普通符号链接；所有已存在的父目录也必须检查。
-        for path in reversed((self.root, *self.root.parents)):
-            try:
-                info = path.lstat()
-            except FileNotFoundError:
-                continue
-            if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0):
-                raise SandboxError("工作区及父目录不能包含符号链接或重解析点")
-            if not stat.S_ISDIR(info.st_mode):
-                raise SandboxError("工作区父路径必须是目录")
+        reject_link_chain(self.root, directory=True)
 
     def _ensure_root(self) -> Path:
         # 拒绝根目录本身为软链接。建议将 root 放在只有当前用户可修改的目录下。

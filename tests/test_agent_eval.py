@@ -1,5 +1,6 @@
 """Agent Eval 打分及任务集离线测试，不加载 ReActAgent/网络模型。"""
 from pathlib import Path
+import pytest
 from evals.agent_eval import read_tasks, score_task, aggregate
 
 
@@ -83,3 +84,13 @@ def test_eval_remains_read_only_when_gui_write_feature_enabled(monkeypatch, tmp_
             'expected_tool': 'get_current_directory', 'expected_args': {},
             'answer_marker': r'D:\AgentEvalWorkspace'}
     assert run_one(task, 'mock', 'fake', tmp_path)['rule_pass']
+
+
+@pytest.mark.parametrize('protocol', ['react_text', 'native_fc'])
+def test_all_fixed_tasks_run_offline_through_both_protocols(monkeypatch, tmp_path, protocol):
+    from sys_agent import react_agent
+    from evals.agent_eval import run_one, read_tasks, DATA
+    monkeypatch.setattr(react_agent, 'ModelManager', lambda: (_ for _ in ()).throw(
+        AssertionError('Mock initialized a real model')))
+    rows = [run_one(task, 'mock', 'fake', tmp_path/protocol, protocol) for task in read_tasks(DATA)]
+    assert len(rows) == 30 and all(row['rule_pass'] for row in rows)

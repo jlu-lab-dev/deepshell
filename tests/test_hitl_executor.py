@@ -54,7 +54,8 @@ def test_original_write_file_still_forbidden(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize('choice', ['approve', 'deny', 'close', 'timeout', 'stop'])
 @pytest.mark.parametrize('tool_name', ['create_text_file', 'run_program'])
-def test_real_qt_approval_loop(monkeypatch, tmp_path, qtbot, choice, tool_name):
+@pytest.mark.parametrize('protocol', ['react_text', 'native_fc'])
+def test_real_qt_approval_loop(monkeypatch, tmp_path, qtbot, choice, tool_name, protocol):
     """真实 Qt 双线程及 MainWin 审批槽；模型使用脚本，写入只在 tmp_path。"""
     import ast
     import json
@@ -84,9 +85,22 @@ def test_real_qt_approval_loop(monkeypatch, tmp_path, qtbot, choice, tool_name):
         'Final Answer: created successfully',
     ]))
     trace = TraceRecorder(tmp_path / 'traces')
+    def native_create(**kwargs):
+        reply = model.chat()
+        action = react_agent._extract_action(reply)
+        message = SimpleNamespace(content=None, tool_calls=[SimpleNamespace(id='call_qt', type='function',
+            function=SimpleNamespace(name=action['tool'], arguments=json.dumps(action['args'])))]) if action else SimpleNamespace(
+            content=react_agent._extract_final_answer(reply), tool_calls=[])
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+    native_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=native_create)))
+    monkeypatch.setattr(react_agent.ConfigManager(), 'get_model_config', lambda _: {
+        'type': 'openai_compatible', 'api_base': 'https://example.invalid/v1', 'api_key': 'fake', 'model_name': 'fake'})
+    monkeypatch.setitem(react_agent.ConfigManager().app_config['agent'], 'tool_call_mode', protocol)
     agent = react_agent.ReActAgent('fake', schemas, {'run_program': fake_command}, lambda *_: None, lambda *_: None,
-        lambda *_: None, lambda *_: None, lambda: False, model_manager=model, trace_recorder=trace)
+        lambda *_: None, lambda *_: None, lambda: False, model_manager=model, trace_recorder=trace,
+        tool_call_mode=protocol, native_client=native_client)
     def agent_factory(**kwargs):
+        assert kwargs['tool_call_mode'] == protocol
         agent.thought_chain_collector = kwargs['thought_chain_collector']
         return agent
     monkeypatch.setattr(react_agent, 'ReActAgent', agent_factory)
